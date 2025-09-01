@@ -23,7 +23,7 @@ make
 
 sudo make suidinstall
 
-sudo usermod -aG kismet rfdog
+sudo usermod -aG kismet toor
 
 [Insert wi-fi dongle now]
 
