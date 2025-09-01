@@ -1,0 +1,16 @@
+[Unit]
+Description=Set wlan1 to monitor mode
+After=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ip link set wlan1 down
+ExecStart=/usr/sbin/iw dev wlan1 set type monitor
+ExecStart=/usr/sbin/ip link set wlan1 up
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
+sudo systemctl enable wlan1-monitor.service
+sudo systemctl start wlan1-monitor.service
