@@ -27,6 +27,8 @@ sudo usermod -aG kismet toor
 
 [Insert wi-fi dongle now]
 
+iw dev wlan1 info
+
 sudo curl -o /etc/systemd/system/wlan1-monitor.service https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/wlan1-monitor.service
 
 sudo systemctl daemon-reload
