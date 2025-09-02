@@ -64,7 +64,7 @@ function monitorKismetFiles() {
   
   updateKnownFiles();
   
-  // Check every minute for new files
+  // Check every 30 seconds for new files (since rotation is more frequent)
   setInterval(() => {
     try {
       const files = fs.readdirSync(homeDir);
@@ -95,7 +95,7 @@ function monitorKismetFiles() {
     } catch (error) {
       console.error('Error monitoring files:', error);
     }
-  }, 60000); // Check every minute
+  }, 30000); // Check every 30 seconds instead of 1 minute
 }
 
 function startKismet() {
@@ -105,7 +105,7 @@ function startKismet() {
     '--daemonize',
     '--log-types', 'kismet',
     '--log-title', 'rpi-kismet',
-    '--log-rotate-seconds', '3600',
+    '--log-rotate-seconds', '900',  // Rotate every 15 minutes (900 seconds)
     '--filter-tracker', 'TRACKERELEMENT(dot11.device/dot11.device.probed_ssid_map) and TRACKERELEMENT(dot11.device/dot11.device.probed_ssid_map) != ""'
   ], {
     stdio: ['ignore', 'pipe', 'pipe']
