@@ -5,7 +5,8 @@ Wants=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c 'while ! ip link show wlan1 >/dev/null 2>&1; do echo "Waiting for wlan1..."; sleep 2; done; ip link set wlan1 down && iw dev wlan1 set type monitor && ip link set wlan1 up'
+User=root
+ExecStart=/bin/bash -c 'while ! ip link show wlan1 >/dev/null 2>&1; do echo "Waiting for wlan1..."; sleep 2; done; echo "Found wlan1, setting to monitor mode..."; ip link set wlan1 down && echo "Interface down" && iw dev wlan1 set type monitor && echo "Monitor mode set" && ip link set wlan1 up && echo "Interface up" && iwconfig wlan1'
 ExecStartPost=/bin/systemctl start script-downloader.service
 RemainAfterExit=true
 TimeoutStartSec=60
