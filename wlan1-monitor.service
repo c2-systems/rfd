@@ -1,16 +1,14 @@
 [Unit]
-Description=Set wlan1 to monitor mode
+Description=Set wlan1 to monitor mode and start script
 After=network.target
 Wants=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/sbin/ip link set wlan1 down
-ExecStart=/usr/sbin/iw dev wlan1 set type monitor
-ExecStart=/usr/sbin/ip link set wlan1 up
+ExecStart=/bin/bash -c 'while ! ip link show wlan1 >/dev/null 2>&1; do echo "Waiting for wlan1..."; sleep 2; done; ip link set wlan1 down && iw dev wlan1 set type monitor && ip link set wlan1 up'
+ExecStartPost=/bin/systemctl start script-downloader.service
 RemainAfterExit=true
+TimeoutStartSec=60
 
 [Install]
 WantedBy=multi-user.target
-sudo systemctl enable wlan1-monitor.service
-sudo systemctl start wlan1-monitor.service
