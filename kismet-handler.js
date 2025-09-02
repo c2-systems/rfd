@@ -60,7 +60,7 @@ async function uploadToServer(filePath, fileName) {
     
     if (response.ok) {
       console.log(`Uploaded ${fileName} successfully`);
-      fs.unlinkSync(filePath);
+      // Don't delete the file - it's the rolling log!
     } else {
       console.error(`Upload failed for ${fileName}:`, response.status);
     }
@@ -69,60 +69,30 @@ async function uploadToServer(filePath, fileName) {
   }
 }
 
-// Monitor for closed Kismet files
-function monitorKismetFiles() {
+// Copy and upload the rolling log file every 15 minutes
+function uploadRollingLog() {
   const homeDir = '/home/toor';
-  let knownFiles = new Set();
+  const rollingLogFile = 'rpi-kismet.kismet'; // This will be the consistent filename
+  const rollingLogPath = path.join(homeDir, rollingLogFile);
   
-  // Get initial file list
-  function updateKnownFiles() {
-    try {
-      const files = fs.readdirSync(homeDir);
-      files.forEach(file => {
-        if (file.includes('rpi-kismet') && file.endsWith('.kismet')) {
-          knownFiles.add(file);
-        }
-      });
-    } catch (error) {
-      console.error('Error reading directory:', error);
-    }
+  // Check if the rolling log exists
+  if (fs.existsSync(rollingLogPath)) {
+    // Create timestamped filename for upload
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5); // YYYY-MM-DDTHH-MM-SS
+    const uploadFileName = `${serial}/rpi-kismet-${timestamp}.kismet`;
+    
+    console.log(`Uploading rolling log as: ${uploadFileName}`);
+    uploadToServer(rollingLogPath, uploadFileName);
+  } else {
+    console.log('Rolling log file not found yet');
   }
-  
-  updateKnownFiles();
-  
-  // Check every 30 seconds for new files (since rotation is more frequent)
-  setInterval(() => {
-    try {
-      const files = fs.readdirSync(homeDir);
-      const currentKismetFiles = files.filter(file => 
-        file.includes('rpi-kismet') && file.endsWith('.kismet')
-      );
-      
-      currentKismetFiles.forEach(file => {
-        if (!knownFiles.has(file)) {
-          // New file detected, but wait to see if it's still being written to
-          setTimeout(() => {
-            const filePath = path.join(homeDir, file);
-            const journalPath = filePath + '-journal';
-            
-            // Check if journal file exists (indicates file is still active)
-            if (!fs.existsSync(journalPath)) {
-              console.log(`Found closed Kismet file: ${file}`);
-              const fileName = `${serial}/${file}`;
-              uploadToServer(filePath, fileName);
-            }
-          }, 30000); // Wait 30 seconds to ensure file is closed
-        }
-      });
-      
-      // Update known files
-      knownFiles = new Set(currentKismetFiles);
-      
-    } catch (error) {
-      console.error('Error monitoring files:', error);
-    }
-  }, 30000); // Check every 30 seconds instead of 1 minute
 }
+
+// Start periodic uploads every 15 minutes (900000 ms)
+setInterval(uploadRollingLog, 15 * 60 * 1000);
+
+// Also do an initial upload after 2 minutes to get started
+setTimeout(uploadRollingLog, 2 * 60 * 1000);
 
 function startKismet() {
   const kismetProcess = spawn('kismet', [
@@ -131,7 +101,7 @@ function startKismet() {
     '--daemonize',
     '--log-types', 'kismet',
     '--log-title', 'rpi-kismet',
-    '--log-rotate-seconds', '900',  // Rotate every 15 minutes (900 seconds)
+    // Remove the invalid --log-rotate-seconds parameter
     '--filter-tracker', 'TRACKERELEMENT(dot11.device/dot11.device.probed_ssid_map) and TRACKERELEMENT(dot11.device/dot11.device.probed_ssid_map) != ""'
   ], {
     stdio: ['ignore', 'pipe', 'pipe']
@@ -152,6 +122,7 @@ function startKismet() {
   return kismetProcess;
 }
 
-// Start everything
+// Start Kismet
 const kismet = startKismet();
-monitorKismetFiles();
+
+console.log('Kismet started with rolling log uploads every 15 minutes');
