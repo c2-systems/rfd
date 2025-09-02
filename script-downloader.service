@@ -1,0 +1,15 @@
+[Unit]
+Description=Download and run Node.js script
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi
+ExecStart=/bin/bash -c 'curl -o script.js https://your-server.com/script.js && node script.js'
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
