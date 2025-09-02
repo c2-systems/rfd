@@ -97,11 +97,15 @@ setTimeout(uploadRollingLog, 2 * 60 * 1000);
 function startKismet() {
   const kismetProcess = spawn('kismet', [
     '--capture-source', 'wlan1',
-    '--no-ncurses',
+    '--no-ncurses',  
     '--daemonize',
     '--log-types', 'kismet',
     '--log-title', 'rpi-kismet',
-    // Remove the invalid --log-rotate-seconds parameter
+    '--log-prefix', '/home/toor',
+    '--override', 'kis_log_packet_timeout=900',
+    '--override', 'kis_log_device_timeout=900', 
+    '--override', 'kis_log_alert_timeout=900',
+    '--override', 'kis_log_ephemeral_dangerous=true',
     '--filter-tracker', 'TRACKERELEMENT(dot11.device/dot11.device.probed_ssid_map) and TRACKERELEMENT(dot11.device/dot11.device.probed_ssid_map) != ""'
   ], {
     stdio: ['ignore', 'pipe', 'pipe']
