@@ -1,11 +1,102 @@
 const fs = require('fs');
+const path = require('path');
 const { spawn } = require('child_process');
 
-const serial = getRPiSerial();
+// Your existing code
+function getRPiSerial() {
+  try {
+    const cpuInfo = fs.readFileSync('/proc/cpuinfo', 'utf8');
+    const serialMatch = cpuInfo.match(/Serial\s*:\s*([a-f0-9]+)/i);
+    return serialMatch ? serialMatch[1] : null;
+  } catch (error) {
+    console.error('Error reading serial:', error);
+    return null;
+  }
+}
 
-fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/boot', {
-  headers: { 'X-Pi-Serial': serial }
-}).then(()=>{});
+const serial = getRPiSerial();
+fetch(`https://expressapp-igdj5fhnlq-ey.a.run.app/boot?serial=${serial}`).then(()=>{});
+
+// Upload to your server
+async function uploadToServer(filePath, fileName) {
+  try {
+    const fileData = fs.readFileSync(filePath);
+    
+    const response = await fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/upload', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Filename': fileName,
+        'X-Pi-Serial': serial
+      },
+      body: fileData
+    });
+    
+    if (response.ok) {
+      console.log(`Uploaded ${fileName} successfully`);
+      fs.unlinkSync(filePath);
+    } else {
+      console.error(`Upload failed for ${fileName}:`, response.status);
+    }
+  } catch (error) {
+    console.error(`Error uploading ${fileName}:`, error);
+  }
+}
+
+// Monitor for closed Kismet files
+function monitorKismetFiles() {
+  const homeDir = '/home/toor';
+  let knownFiles = new Set();
+  
+  // Get initial file list
+  function updateKnownFiles() {
+    try {
+      const files = fs.readdirSync(homeDir);
+      files.forEach(file => {
+        if (file.includes('rpi-kismet') && file.endsWith('.kismet')) {
+          knownFiles.add(file);
+        }
+      });
+    } catch (error) {
+      console.error('Error reading directory:', error);
+    }
+  }
+  
+  updateKnownFiles();
+  
+  // Check every minute for new files
+  setInterval(() => {
+    try {
+      const files = fs.readdirSync(homeDir);
+      const currentKismetFiles = files.filter(file => 
+        file.includes('rpi-kismet') && file.endsWith('.kismet')
+      );
+      
+      currentKismetFiles.forEach(file => {
+        if (!knownFiles.has(file)) {
+          // New file detected, but wait to see if it's still being written to
+          setTimeout(() => {
+            const filePath = path.join(homeDir, file);
+            const journalPath = filePath + '-journal';
+            
+            // Check if journal file exists (indicates file is still active)
+            if (!fs.existsSync(journalPath)) {
+              console.log(`Found closed Kismet file: ${file}`);
+              const fileName = `${serial}/${file}`;
+              uploadToServer(filePath, fileName);
+            }
+          }, 30000); // Wait 30 seconds to ensure file is closed
+        }
+      });
+      
+      // Update known files
+      knownFiles = new Set(currentKismetFiles);
+      
+    } catch (error) {
+      console.error('Error monitoring files:', error);
+    }
+  }, 60000); // Check every minute
+}
 
 function startKismet() {
   const kismetProcess = spawn('kismet', [
@@ -14,7 +105,7 @@ function startKismet() {
     '--daemonize',
     '--log-types', 'kismet',
     '--log-title', 'rpi-kismet',
-    '--log-rotate-seconds', '3600',  // Rotate every hour (3600 seconds)
+    '--log-rotate-seconds', '3600',
     '--filter-tracker', 'TRACKERELEMENT(dot11.device/dot11.device.probed_ssid_map) and TRACKERELEMENT(dot11.device/dot11.device.probed_ssid_map) != ""'
   ], {
     stdio: ['ignore', 'pipe', 'pipe']
@@ -35,16 +126,6 @@ function startKismet() {
   return kismetProcess;
 }
 
-function getRPiSerial() {
-  try {
-    const cpuInfo = fs.readFileSync('/proc/cpuinfo', 'utf8');
-    const serialMatch = cpuInfo.match(/Serial\s*:\s*([a-f0-9]+)/i);
-    return serialMatch ? serialMatch[1] : null;
-  } catch (error) {
-    console.error('Error reading serial:', error);
-    return null;
-  }
-}
-
-// Start Kismet
+// Start everything
 const kismet = startKismet();
+monitorKismetFiles();
