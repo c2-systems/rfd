@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi
+User=toor
+WorkingDirectory=/home/toor
 ExecStart=/bin/bash -c 'curl -o kismet-handler.js https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet-handler.js && node kismet-handler.js'
 Restart=on-failure
 RestartSec=10
