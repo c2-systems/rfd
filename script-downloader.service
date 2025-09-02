@@ -1,5 +1,5 @@
 [Unit]
-Description=Download and run Node.js script
+Description=Download and run kismet-handler.js from GitHub
 After=network-online.target
 Wants=network-online.target
 
@@ -7,9 +7,11 @@ Wants=network-online.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi
-ExecStart=/bin/bash -c 'curl -o script.js https://your-server.com/script.js && node script.js'
+ExecStart=/bin/bash -c 'curl -o kismet-handler.js https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet-handler.js && node kismet-handler.js'
 Restart=on-failure
 RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
