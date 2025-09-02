@@ -23,6 +23,26 @@ fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/boot', {
   }
 }).then(()=>{});
 
+// Delete all existing kismet files after boot
+function cleanupKismetFiles() {
+  const homeDir = '/home/toor';
+  try {
+    const files = fs.readdirSync(homeDir);
+    files.forEach(file => {
+      if (file.includes('rpi-kismet') && (file.endsWith('.kismet') || file.endsWith('.kismet-journal'))) {
+        const filePath = path.join(homeDir, file);
+        fs.unlinkSync(filePath);
+        console.log(`Deleted old kismet file: ${file}`);
+      }
+    });
+  } catch (error) {
+    console.error('Error cleaning up kismet files:', error);
+  }
+}
+
+// Clean up old files
+cleanupKismetFiles();
+
 // Upload to your server
 async function uploadToServer(filePath, fileName) {
   try {
