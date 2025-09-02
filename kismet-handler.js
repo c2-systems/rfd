@@ -1,6 +1,11 @@
+const fs = require('fs');
 const { spawn } = require('child_process');
 
-fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/boot').then(()=>{});
+const serial = getRPiSerial();
+
+fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/boot', {
+  headers: { 'X-Pi-Serial': serial }
+}).then(()=>{});
 
 function startKismet() {
   const kismetProcess = spawn('kismet', [
@@ -28,6 +33,17 @@ function startKismet() {
   });
 
   return kismetProcess;
+}
+
+function getRPiSerial() {
+  try {
+    const cpuInfo = fs.readFileSync('/proc/cpuinfo', 'utf8');
+    const serialMatch = cpuInfo.match(/Serial\s*:\s*([a-f0-9]+)/i);
+    return serialMatch ? serialMatch[1] : null;
+  } catch (error) {
+    console.error('Error reading serial:', error);
+    return null;
+  }
 }
 
 // Start Kismet
