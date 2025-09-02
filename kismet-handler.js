@@ -15,7 +15,13 @@ function getRPiSerial() {
 }
 
 const serial = getRPiSerial();
-fetch(`https://expressapp-igdj5fhnlq-ey.a.run.app/boot?serial=${serial}`).then(()=>{});
+
+// Send boot notification with serial as header
+fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/boot', {
+  headers: {
+    'X-Pi-Serial': serial
+  }
+}).then(()=>{});
 
 // Upload to your server
 async function uploadToServer(filePath, fileName) {
