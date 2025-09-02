@@ -105,7 +105,6 @@ function startKismet() {
     '--override', 'kis_log_packet_timeout=900',
     '--override', 'kis_log_device_timeout=900', 
     '--override', 'kis_log_alert_timeout=900',
-    '--override', 'kis_log_ephemeral_dangerous=true',
     '--filter-tracker', 'TRACKERELEMENT(dot11.device/dot11.device.probed_ssid_map) and TRACKERELEMENT(dot11.device/dot11.device.probed_ssid_map) != ""'
   ], {
     stdio: ['ignore', 'pipe', 'pipe']
