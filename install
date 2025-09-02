@@ -37,12 +37,5 @@ sudo systemctl daemon-reload
 
 sudo systemctl enable wlan1-monitor.service
 
-sudo systemctl enable script-downloader.service
-
 sudo systemctl start wlan1-monitor.service
 
-sudo systemctl start script-downloader.service
-
-sudo systemctl status wlan1-monitor.service
-
-sudo systemctl status script-downloader.service
