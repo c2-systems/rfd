@@ -33,11 +33,19 @@ sudo curl -o /home/toor/kismet.conf https://raw.githubusercontent.com/c2-systems
 
 sudo curl -o /etc/systemd/system/wlan1-monitor.service https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/wlan1-monitor.service
 
-sudo curl -o /etc/systemd/system/script-downloader.service https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/script-downloader.service
+sudo curl -o /etc/systemd/system/kismet-boot.service https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet-boot.service
+
+sudo curl -o /etc/systemd/system/kismet-uploader.service https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet-uploader.service
 
 sudo systemctl daemon-reload
 
 sudo systemctl enable wlan1-monitor.service
+
+sudo systemctl enable kismet-boot.service
+
+sudo systemctl enable kismet-uploader.service
+
+
 
 sudo systemctl start wlan1-monitor.service
 
