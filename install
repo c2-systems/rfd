@@ -41,14 +41,11 @@ sudo systemctl daemon-reload
 
 sudo systemctl enable wlan1-monitor.service
 
-sudo systemctl enable kismet-boot.service
+(don't enable kismet-boot.service - it is called from wlan1 service)
 
 sudo systemctl enable kismet-uploader.service
 
 
-
-sudo systemctl start wlan1-monitor.service
-
-sudo systemctl status script-downloader.service
+sudo systemctl status kismet-uplaoder.service
 
 watch -n 5 'du -h /home/toor/*.kismet'
