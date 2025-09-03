@@ -1,0 +1,17 @@
+[Unit]
+Description=Kismet database uploader service
+After=kismet-boot.service
+Wants=kismet-boot.service
+
+[Service]
+Type=simple
+User=toor
+WorkingDirectory=/home/toor
+ExecStart=/bin/bash -c 'curl -o kismet-uploader.js https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet-uploader.js && node kismet-uploader.js'
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
