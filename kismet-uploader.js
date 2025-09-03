@@ -46,21 +46,33 @@ function saveState() {
   }
 }
 
-// Upload data to server
+// Upload data to server (creates a JSON file and uploads as binary)
 async function uploadData(data, dataType) {
   try {
+    // Create JSON string and convert to buffer (binary data)
+    const jsonData = JSON.stringify({
+      dataType: dataType,
+      timestamp: new Date().toISOString(),
+      piSerial: serial,
+      records: data
+    }, null, 2);
+    
+    const buffer = Buffer.from(jsonData, 'utf8');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const filename = `${serial}/${dataType}-${timestamp}.json`;
+    
     const response = await fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/upload', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'X-Pi-Serial': serial,
-        'X-Data-Type': dataType
+        'Content-Type': 'application/octet-stream',
+        'X-Filename': filename,
+        'X-Pi-Serial': serial
       },
-      body: JSON.stringify(data)
+      body: buffer
     });
     
     if (response.ok) {
-      console.log(`Uploaded ${data.length} ${dataType} records successfully`);
+      console.log(`Uploaded ${data.length} ${dataType} records successfully as ${filename}`);
       return true;
     } else {
       console.error(`Upload failed for ${dataType}:`, response.status);
