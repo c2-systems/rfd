@@ -61,6 +61,8 @@ async function uploadData(data, dataType) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     const filename = `${serial}/${dataType}-${timestamp}.json`;
     
+    console.log(`Attempting upload with Pi Serial: ${serial}, filename: ${filename}`);
+    
     const response = await fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/upload', {
       method: 'POST',
       headers: {
@@ -75,7 +77,8 @@ async function uploadData(data, dataType) {
       console.log(`Uploaded ${data.length} ${dataType} records successfully as ${filename}`);
       return true;
     } else {
-      console.error(`Upload failed for ${dataType}:`, response.status);
+      const errorText = await response.text();
+      console.error(`Upload failed for ${dataType}:`, response.status, errorText);
       return false;
     }
   } catch (error) {
@@ -152,10 +155,10 @@ async function processKismetDatabase() {
 // Load initial state
 loadState();
 
-// Process database every 30 seconds
-setInterval(processKismetDatabase, 30 * 1000);
+// Process database every 5 minutes
+setInterval(processKismetDatabase, 5 * 60 * 1000);
 
 // Also do an initial processing after 1 minute
 setTimeout(processKismetDatabase, 60 * 1000);
 
-console.log('Kismet uploader service started - will process database every 30 seconds');
+console.log('Kismet uploader service started - will process database every 5 minutes');
