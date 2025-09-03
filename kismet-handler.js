@@ -99,13 +99,7 @@ function startKismet() {
     '--capture-source', 'wlan1',
     '--no-ncurses',  
     '--daemonize',
-    '--log-types', 'kismet',
-    '--log-title', 'rpi-kismet',
-    '--log-prefix', '/home/toor',
-    '--override', 'kis_log_packet_timeout=900',
-    '--override', 'kis_log_device_timeout=900', 
-    '--override', 'kis_log_alert_timeout=900',
-    '--filter-tracker', 'TRACKERELEMENT(dot11.device/dot11.device.probed_ssid_map) and TRACKERELEMENT(dot11.device/dot11.device.probed_ssid_map) != ""'
+    '--config-file', '/path/to/your/kismet.conf'  // Point to your config file
   ], {
     stdio: ['ignore', 'pipe', 'pipe']
   });
