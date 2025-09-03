@@ -108,21 +108,26 @@ function processBuffer(obj) {
   return result;
 }
 
-// Upload data to server (creates a JSON file and uploads as binary)
-async function uploadData(data, dataType, tableName) {
+// Upload combined data from all tables as one file
+async function uploadCombinedData(allTableData) {
   try {
     const jsonData = JSON.stringify({
-      dataType: dataType,
-      tableName: tableName,
+      dataType: 'kismet-combined',
       timestamp: new Date().toISOString(),
       piSerial: serial,
-      recordCount: data.length,
-      records: data
+      tables: allTableData,
+      summary: {
+        tableCount: Object.keys(allTableData).length,
+        totalRecords: Object.values(allTableData).reduce((sum, records) => sum + records.length, 0),
+        tableBreakdown: Object.fromEntries(
+          Object.entries(allTableData).map(([name, records]) => [name, records.length])
+        )
+      }
     }, null, 2);
     
     const buffer = Buffer.from(jsonData, 'utf8');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `${tableName}-${timestamp}.json`;
+    const filename = `kismet-combined-${timestamp}.json`;
     
     console.log(`Attempting upload with Pi Serial: ${serial}, filename: ${filename}`);
     
@@ -137,15 +142,16 @@ async function uploadData(data, dataType, tableName) {
     });
     
     if (response.ok) {
-      console.log(`Uploaded ${data.length} ${tableName} records successfully as ${filename}`);
+      const totalRecords = Object.values(allTableData).reduce((sum, records) => sum + records.length, 0);
+      console.log(`Uploaded combined data successfully as ${filename} (${totalRecords} total records)`);
       return true;
     } else {
       const errorText = await response.text();
-      console.error(`Upload failed for ${tableName}:`, response.status, errorText);
+      console.error(`Upload failed for combined data:`, response.status, errorText);
       return false;
     }
   } catch (error) {
-    console.error(`Error uploading ${tableName}:`, error);
+    console.error(`Error uploading combined data:`, error);
     return false;
   }
 }
@@ -182,6 +188,10 @@ async function processKismetDatabase() {
       // Get all table names
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
       
+      const allTableData = {};
+      let hasNewData = false;
+      let maxTimestamp = lastProcessedTimestamp;
+      
       for (const table of tables) {
         const tableName = table.name;
         
@@ -212,7 +222,7 @@ async function processKismetDatabase() {
             }
             
             if (timestampCol) {
-              query = `SELECT * FROM "${tableName}" WHERE "${timestampCol}" > ? ORDER BY "${timestampCol}" ASC LIMIT 100`;
+              query = `SELECT * FROM "${tableName}" WHERE "${timestampCol}" > ? ORDER BY "${timestampCol}" ASC LIMIT 500`;
               params = [lastProcessedTimestamp];
             } else {
               query = `SELECT * FROM "${tableName}" LIMIT 100`;
@@ -224,6 +234,7 @@ async function processKismetDatabase() {
           const rows = db.prepare(query).all(...params);
           
           if (rows.length === 0) {
+            allTableData[tableName] = [];
             continue;
           }
           
@@ -232,33 +243,47 @@ async function processKismetDatabase() {
             .filter(row => row.type !== "Wi-Fi AP")
             .map(row => processBuffer(row));
           
-          if (processedRows.length === 0) {
-            continue;
-          }
+          allTableData[tableName] = processedRows;
           
-          console.log(`Found ${processedRows.length} new ${tableName} records`);
-          
-          const success = await uploadData(processedRows, 'kismet-data', tableName);
-          
-          if (success && hasTimestamp) {
-            // Update timestamp from the latest row
-            const timestampColumns = ['ts_sec', 'last_time', 'first_time', 'timestamp'];
-            for (const col of timestampColumns) {
-              if (rows[0][col] && typeof rows[0][col] === 'number') {
-                const maxTimestamp = Math.max(...rows.map(r => r[col] || 0));
-                if (maxTimestamp > lastProcessedTimestamp) {
-                  lastProcessedTimestamp = maxTimestamp;
-                  saveState();
-                  console.log(`Updated last processed timestamp to: ${lastProcessedTimestamp}`);
+          if (processedRows.length > 0) {
+            hasNewData = true;
+            console.log(`Found ${processedRows.length} new ${tableName} records`);
+            
+            // Update max timestamp if this table has timestamps
+            if (hasTimestamp) {
+              const timestampColumns = ['ts_sec', 'last_time', 'first_time', 'timestamp'];
+              for (const col of timestampColumns) {
+                if (rows[0][col] && typeof rows[0][col] === 'number') {
+                  const tableMaxTimestamp = Math.max(...rows.map(r => r[col] || 0));
+                  if (tableMaxTimestamp > maxTimestamp) {
+                    maxTimestamp = tableMaxTimestamp;
+                  }
+                  break;
                 }
-                break;
               }
             }
           }
           
         } catch (tableError) {
           console.error(`Error processing table ${tableName}:`, tableError.message);
+          allTableData[tableName] = [];
         }
+      }
+      
+      // Only upload if we have new data
+      if (hasNewData) {
+        const totalRecords = Object.values(allTableData).reduce((sum, records) => sum + records.length, 0);
+        console.log(`Total new records across all tables: ${totalRecords}`);
+        
+        const success = await uploadCombinedData(allTableData);
+        
+        if (success) {
+          lastProcessedTimestamp = maxTimestamp;
+          saveState();
+          console.log(`Updated last processed timestamp to: ${lastProcessedTimestamp}`);
+        }
+      } else {
+        console.log('No new data found in any table');
       }
       
     } finally {
