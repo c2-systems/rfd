@@ -98,7 +98,6 @@ function startKismet() {
   const kismetProcess = spawn('kismet', [
     '--capture-source', 'wlan1',
     '--no-ncurses',  
-    '--daemonize',
     '--config-file', '/home/toor/kismet.conf'
   ], {
     stdio: ['ignore', 'pipe', 'pipe']
