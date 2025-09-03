@@ -99,7 +99,7 @@ function startKismet() {
     '--capture-source', 'wlan1',
     '--no-ncurses',  
     '--daemonize',
-    '--config-file', '/path/to/your/kismet.conf'  // Point to your config file
+    '--config-file', '/home/toor/kismet.conf'
   ], {
     stdio: ['ignore', 'pipe', 'pipe']
   });
