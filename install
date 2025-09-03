@@ -25,14 +25,6 @@ sudo make suidinstall
 
 sudo usermod -aG kismet toor
 
-sudo nano /etc/NetworkManager/NetworkManager.conf
-
-```
-[keyfile]
-unmanaged-devices=interface-name:wlan1
-```
-
-
 [Insert wi-fi dongle now]
 
 iw dev wlan1 info
