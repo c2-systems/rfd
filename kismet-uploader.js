@@ -49,7 +49,7 @@ function saveState() {
 // Upload data to server
 async function uploadData(data, dataType) {
   try {
-    const response = await fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/upload-data', {
+    const response = await fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/upload', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -92,6 +92,8 @@ async function processKismetDatabase() {
     const latestFile = kismetFiles.sort().pop();
     const dbPath = path.join(homeDir, latestFile);
     
+    console.log(`Processing database: ${latestFile}, last processed timestamp: ${lastProcessedTimestamp}`);
+    
     if (!fs.existsSync(dbPath)) {
       console.log('Database file not found:', dbPath);
       return;
@@ -104,7 +106,7 @@ async function processKismetDatabase() {
       SELECT * FROM packets 
       WHERE ts_sec > ? 
       ORDER BY ts_sec ASC 
-      LIMIT 1000
+      LIMIT 100
     `;
     
     db.all(packetQuery, [lastProcessedTimestamp], async (err, packets) => {
@@ -114,37 +116,21 @@ async function processKismetDatabase() {
       }
       
       if (packets.length > 0) {
-        console.log(`Found ${packets.length} new packets`);
+        console.log(`Found ${packets.length} new packets (timestamps: ${packets[0].ts_sec} to ${packets[packets.length-1].ts_sec})`);
         
         const success = await uploadData(packets, 'packets');
         if (success) {
           // Update last processed timestamp
           lastProcessedTimestamp = Math.max(...packets.map(p => p.ts_sec));
           saveState();
+          console.log(`Updated last processed timestamp to: ${lastProcessedTimestamp}`);
         }
-      }
-    });
-    
-    // Get new devices since last check
-    const deviceQuery = `
-      SELECT * FROM devices 
-      WHERE last_time > ? 
-      ORDER BY last_time ASC
-    `;
-    
-    db.all(deviceQuery, [lastProcessedTimestamp], async (err, devices) => {
-      if (err) {
-        console.error('Error querying devices:', err);
-        return;
+      } else {
+        console.log('No new packets found');
       }
       
-      if (devices.length > 0) {
-        console.log(`Found ${devices.length} new/updated devices`);
-        await uploadData(devices, 'devices');
-      }
+      db.close();
     });
-    
-    db.close();
     
   } catch (error) {
     console.error('Error processing kismet database:', error);
