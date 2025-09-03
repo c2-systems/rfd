@@ -59,7 +59,7 @@ async function uploadData(data, dataType) {
     
     const buffer = Buffer.from(jsonData, 'utf8');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `${serial}/${dataType}-${timestamp}.json`;
+    const filename = `${dataType}-${timestamp}.json`;  // Remove serial from filename
     
     console.log(`Attempting upload with Pi Serial: ${serial}, filename: ${filename}`);
     
