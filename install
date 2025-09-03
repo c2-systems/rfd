@@ -37,7 +37,7 @@ unmanaged-devices=interface-name:wlan1
 
 iw dev wlan1 info
 
-sudo curl -o /home/toor/kismet.comf https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet.conf
+sudo curl -o /home/toor/kismet.conf https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet.conf
 
 sudo curl -o /etc/systemd/system/wlan1-monitor.service https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/wlan1-monitor.service
 
