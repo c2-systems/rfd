@@ -16,10 +16,7 @@ function getRPiSerial() {
 
 const serial = getRPiSerial();
 
-// Tables to skip for WiFi probe analysis
-const SKIP_TABLES = ['alerts', 'messages', 'snapshots', 'sqlite_sequence', 'KISMET'];
-
-// Process Buffer data (similar to extraction script)
+// Process Buffer data to extract JSON content
 function processBuffer(obj) {
   if (!obj || typeof obj !== 'object') return obj;
   
@@ -44,12 +41,9 @@ function processBuffer(obj) {
       
       try {
           const parsedJson = JSON.parse(asciiString);
-          return { type: "Buffer", data: parsedJson };
+          return parsedJson;
       } catch (jsonError) {
-          const hexString = dataArray
-              .map(byte => byte.toString(16).padStart(2, '0'))
-              .join('');
-          return { type: "Buffer", hex: hexString };
+          return null;
       }
   }
   
@@ -61,46 +55,108 @@ function processBuffer(obj) {
       
       try {
           const parsedJson = JSON.parse(asciiString);
-          return { type: obj.type, data: parsedJson };
+          return parsedJson;
       } catch (jsonError) {
-          const hexString = obj.data
-              .map(byte => byte.toString(16).padStart(2, '0'))
-              .join('');
-          return { type: obj.type, hex: hexString };
+          return null;
       }
   }
   
-  if (Array.isArray(obj)) {
-      return obj.map(item => processBuffer(item));
-  }
-  
-  const result = {};
-  for (const [key, value] of Object.entries(obj)) {
-      result[key] = processBuffer(value);
-  }
-  return result;
+  return obj;
 }
 
-// Upload combined WiFi probe data
-async function uploadCombinedData(allTableData) {
+// Extract probe information from device data
+function extractProbeInfo(deviceData) {
+  const probes = [];
+  
+  try {
+    // Process the device buffer to get JSON data
+    const processedDevice = processBuffer(deviceData.device);
+    
+    if (!processedDevice) {
+      return probes;
+    }
+    
+    // Extract basic info
+    const macaddr = processedDevice['kismet.device.base.macaddr'] || deviceData.devmac;
+    const firstTime = processedDevice['kismet.device.base.first_time'] || deviceData.first_time;
+    const lastTime = processedDevice['kismet.device.base.last_time'] || deviceData.last_time;
+    
+    // Look for probed SSIDs in the dot11 device data
+    const dot11Device = processedDevice['dot11.device'];
+    if (dot11Device) {
+      // Check for probed SSIDs - they might be in different fields
+      const probedSsids = [];
+      
+      // Look for various SSID fields that might contain probe requests
+      if (dot11Device['dot11.device.probed_ssid_map']) {
+        const ssidMap = dot11Device['dot11.device.probed_ssid_map'];
+        for (const [ssid, data] of Object.entries(ssidMap)) {
+          if (ssid && ssid !== '') {
+            probedSsids.push({
+              ssid: ssid,
+              first_time: data.first_time || firstTime,
+              last_time: data.last_time || lastTime
+            });
+          }
+        }
+      }
+      
+      // If we found probed SSIDs, create entries for each
+      if (probedSsids.length > 0) {
+        probedSsids.forEach(ssidInfo => {
+          probes.push({
+            macaddr: macaddr,
+            capture_time: ssidInfo.first_time,
+            last_seen: ssidInfo.last_time,
+            probed_ssid: ssidInfo.ssid
+          });
+        });
+      } else if (dot11Device['dot11.device.num_probed_ssids'] > 0) {
+        // Device has probed SSIDs but we couldn't extract them
+        probes.push({
+          macaddr: macaddr,
+          capture_time: firstTime,
+          last_seen: lastTime,
+          probed_ssid: 'HIDDEN_OR_UNKNOWN'
+        });
+      }
+    }
+    
+    // If no specific probe data found but this is a client device, still record it
+    if (probes.length === 0 && deviceData.type === 'Wi-Fi Client') {
+      probes.push({
+        macaddr: macaddr,
+        capture_time: firstTime,
+        last_seen: lastTime,
+        probed_ssid: null
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error extracting probe info:', error);
+  }
+  
+  return probes;
+}
+
+// Upload probe data
+async function uploadProbeData(probeData) {
   try {
     const jsonData = JSON.stringify({
-      dataType: 'kismet-wifi-probes',
+      dataType: 'wifi-probe-requests',
       timestamp: new Date().toISOString(),
       piSerial: serial,
-      tables: allTableData,
+      probes: probeData,
       summary: {
-        tableCount: Object.keys(allTableData).length,
-        totalRecords: Object.values(allTableData).reduce((sum, records) => sum + records.length, 0),
-        tableBreakdown: Object.fromEntries(
-          Object.entries(allTableData).map(([name, records]) => [name, records.length])
-        )
+        totalProbes: probeData.length,
+        uniqueDevices: new Set(probeData.map(p => p.macaddr)).size,
+        uniqueSSIDs: new Set(probeData.map(p => p.probed_ssid).filter(s => s)).size
       }
     }, null, 2);
     
     const buffer = Buffer.from(jsonData, 'utf8');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `kismet-wifi-probes-${timestamp}.json`;
+    const filename = `wifi-probes-${timestamp}.json`;
     
     console.log(`Attempting upload with Pi Serial: ${serial}, filename: ${filename}`);
     
@@ -115,21 +171,20 @@ async function uploadCombinedData(allTableData) {
     });
     
     if (response.ok) {
-      const totalRecords = Object.values(allTableData).reduce((sum, records) => sum + records.length, 0);
-      console.log(`Uploaded WiFi probe data successfully as ${filename} (${totalRecords} total records)`);
+      console.log(`Uploaded probe data successfully as ${filename} (${probeData.length} probe records)`);
       return true;
     } else {
       const errorText = await response.text();
-      console.error(`Upload failed for WiFi probe data:`, response.status, errorText);
+      console.error(`Upload failed for probe data:`, response.status, errorText);
       return false;
     }
   } catch (error) {
-    console.error(`Error uploading WiFi probe data:`, error);
+    console.error(`Error uploading probe data:`, error);
     return false;
   }
 }
 
-// Process kismet database for WiFi probes
+// Process kismet database for WiFi probe requests
 async function processKismetDatabase() {
   const homeDir = '/home/toor';
   
@@ -158,52 +213,32 @@ async function processKismetDatabase() {
     const db = new Database(dbPath, { readonly: true });
     
     try {
-      // Get all table names, excluding the ones we don't need for WiFi probes
-      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all()
-        .filter(table => !SKIP_TABLES.includes(table.name))
-        .filter(table => !table.name.startsWith('sqlite_'));
+      // Focus on device table which should contain the probe information
+      const deviceQuery = `SELECT * FROM devices LIMIT 1000`;
+      const deviceRows = db.prepare(deviceQuery).all();
       
-      console.log(`Processing ${tables.length} tables for WiFi probe data (skipping: ${SKIP_TABLES.join(', ')})`);
+      console.log(`Found ${deviceRows.length} device records`);
       
-      const allTableData = {};
-      let totalRecords = 0;
+      const allProbes = [];
       
-      for (const table of tables) {
-        const tableName = table.name;
-        
-        try {
-          // Get all records from each table (no timestamp filtering)
-          const query = `SELECT * FROM "${tableName}" LIMIT 1000`;
-          const rows = db.prepare(query).all();
-          
-          if (rows.length === 0) {
-            allTableData[tableName] = [];
-            continue;
-          }
-          
-          // Process buffers
-          const processedRows = rows
-            .map(row => processBuffer(row))
-            .filter(row => row !== null);
-          
-          allTableData[tableName] = processedRows;
-          totalRecords += processedRows.length;
-          
-          if (processedRows.length > 0) {
-            console.log(`Found ${processedRows.length} ${tableName} records`);
-          }
-          
-        } catch (tableError) {
-          console.error(`Error processing table ${tableName}:`, tableError.message);
-          allTableData[tableName] = [];
-        }
+      for (const deviceRow of deviceRows) {
+        const probes = extractProbeInfo(deviceRow);
+        allProbes.push(...probes);
       }
       
-      console.log(`Total WiFi probe records across all tables: ${totalRecords}`);
+      console.log(`Extracted ${allProbes.length} probe records`);
       
-      // Only upload if we have actual data
-      if (totalRecords > 0) {
-        const success = await uploadCombinedData(allTableData);
+      // Log some sample data for debugging
+      if (allProbes.length > 0) {
+        console.log('Sample probe records:');
+        allProbes.slice(0, 3).forEach((probe, idx) => {
+          console.log(`${idx + 1}:`, probe);
+        });
+      }
+      
+      // Only upload if we have actual probe data
+      if (allProbes.length > 0) {
+        const success = await uploadProbeData(allProbes);
         
         if (success) {
           console.log('Upload successful - database can be flushed');
@@ -213,7 +248,7 @@ async function processKismetDatabase() {
           return false;
         }
       } else {
-        console.log('No data found - skipping upload but database can be flushed');
+        console.log('No probe data found - skipping upload but database can be flushed');
         return true;
       }
       
@@ -228,16 +263,16 @@ async function processKismetDatabase() {
 }
 
 // Main execution - run once and exit
-console.log('Kismet WiFi probe uploader starting single run...');
+console.log('Kismet WiFi probe extractor starting single run...');
 
 processKismetDatabase().then((shouldFlush) => {
   if (shouldFlush) {
-    console.log('Kismet uploader completed successfully - database should be flushed');
+    console.log('Kismet probe extractor completed successfully - database should be flushed');
   } else {
-    console.log('Kismet uploader completed - no flush needed');
+    console.log('Kismet probe extractor completed - no flush needed');
   }
   process.exit(0);
 }).catch((error) => {
-  console.error('Kismet uploader failed:', error);
+  console.error('Kismet probe extractor failed:', error);
   process.exit(1);
 });
