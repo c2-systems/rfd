@@ -91,6 +91,7 @@ function extractProbeInfo(deviceData) {
     // Look for probed SSIDs in the dot11 device data
     const dot11Device = processedDevice['dot11.device'];
     if (dot11Device) {
+		
       // Check for probed SSIDs - they are in an array format
       if (dot11Device['dot11.device.probed_ssid_map'] && Array.isArray(dot11Device['dot11.device.probed_ssid_map'])) {
         const ssidArray = dot11Device['dot11.device.probed_ssid_map'];
@@ -100,98 +101,25 @@ function extractProbeInfo(deviceData) {
             probeRecord.probed_ssids.push({
               ssid: ssidRecord['dot11.probedssid.ssid'],
               first_time: ssidRecord['dot11.probedssid.first_time'] || firstTime,
-              last_time: ssidRecord['dot11.probedssid.last_time'] || lastTime,
-              encryption: ssidRecord['dot11.probedssid.crypt_string'] || 'Unknown'
+              last_time: ssidRecord['dot11.probedssid.last_time'] || lastTime
             });
           }
         });
       }
-      
-      // Also check the last probed SSID record as a fallback
-      if (probeRecord.probed_ssids.length === 0 && dot11Device['dot11.device.last_probed_ssid_record']) {
-        const lastRecord = dot11Device['dot11.device.last_probed_ssid_record'];
-        if (lastRecord['dot11.probedssid.ssid']) {
-          probeRecord.probed_ssids.push({
-            ssid: lastRecord['dot11.probedssid.ssid'],
-            first_time: lastRecord['dot11.probedssid.first_time'] || firstTime,
-            last_time: lastRecord['dot11.probedssid.last_time'] || lastTime,
-            encryption: lastRecord['dot11.probedssid.crypt_string'] || 'Unknown'
-          });
-        }
-      }
-      
-      // If device has probed SSIDs but we couldn't extract them
-      if (probeRecord.probed_ssids.length === 0 && dot11Device['dot11.device.num_probed_ssids'] > 0) {
-        probeRecord.probed_ssids.push({
-          ssid: 'HIDDEN_OR_UNKNOWN',
-          first_time: firstTime,
-          last_time: lastTime,
-          encryption: 'Unknown'
-        });
-      }
+      	  
     }
     
     // Always return the record, even if no SSIDs found (for Wi-Fi clients)
-    return probeRecord;
+	if(probeRecord.probed_ssids.length > 0) {
+		return probeRecord;
+	} else {
+		return null;
+	}
+    
     
   } catch (error) {
     console.error('Error extracting probe info for device:', deviceData.devmac, error);
     return null;
-  }
-}
-
-// Upload probe data
-async function uploadProbeData(probeData) {
-  try {
-    // Filter out any null/undefined records and ensure all have probed_ssids arrays
-    const validProbeData = probeData.filter(d => d && d.macaddr).map(d => ({
-      ...d,
-      probed_ssids: d.probed_ssids || []
-    }));
-    
-    console.log(`Preparing to upload ${validProbeData.length} valid device records`);
-    
-    const jsonData = JSON.stringify({
-      dataType: 'wifi-probe-requests',
-      timestamp: new Date().toISOString(),
-      piSerial: serial,
-      probes: validProbeData,
-      summary: {
-        totalDevices: validProbeData.length,
-        devicesWithProbes: validProbeData.filter(d => d.probed_ssids.length > 0).length,
-        totalSSIDs: validProbeData.reduce((sum, d) => sum + d.probed_ssids.length, 0),
-        uniqueSSIDs: new Set(validProbeData.flatMap(d => d.probed_ssids.map(s => s.ssid))).size
-      }
-    }, null, 2);
-    
-    const buffer = Buffer.from(jsonData, 'utf8');
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `wifi-probes-${timestamp}.json`;
-    
-    console.log(`Attempting upload with Pi Serial: ${serial}, filename: ${filename}`);
-    
-    const response = await fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/upload', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'X-Filename': filename,
-        'X-Pi-Serial': serial
-      },
-      body: buffer
-    });
-    
-    if (response.ok) {
-      const totalProbeCount = validProbeData.reduce((sum, d) => sum + d.probed_ssids.length, 0);
-      console.log(`Uploaded probe data successfully as ${filename} (${validProbeData.length} devices, ${totalProbeCount} total probes)`);
-      return true;
-    } else {
-      const errorText = await response.text();
-      console.error(`Upload failed for probe data:`, response.status, errorText);
-      return false;
-    }
-  } catch (error) {
-    console.error(`Error uploading probe data:`, error);
-    return false;
   }
 }
 
@@ -247,17 +175,6 @@ async function processKismetDatabase() {
         console.log(`Warning: Found ${problemRecords.length} records with missing probed_ssids`);
       }
       
-      // Log some sample data for debugging
-      if (allProbes.length > 0) {
-        console.log('Sample probe records:');
-        allProbes.slice(0, 3).forEach((probe, idx) => {
-          console.log(`${idx + 1}:`, {
-            macaddr: probe ? probe.macaddr : 'UNDEFINED',
-            probed_ssids_count: probe && probe.probed_ssids ? probe.probed_ssids.length : 'UNDEFINED',
-            sample_ssids: probe && probe.probed_ssids ? probe.probed_ssids.slice(0, 2).map(s => s.ssid) : 'UNDEFINED'
-          });
-        });
-      }
       
       // Only upload if we have actual probe data
       if (allProbes.length > 0) {
@@ -285,8 +202,44 @@ async function processKismetDatabase() {
   }
 }
 
-// Main execution - run once and exit
-console.log('Kismet WiFi probe extractor starting single run...');
+async function uploadProbeData(probeData) {
+  try {
+    const jsonData = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      piSerial: serial,
+      probes: probeData
+    }, null, 2);
+    
+    const buffer = Buffer.from(jsonData, 'utf8');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const filename = `wifi-probes-${timestamp}.json`;
+    
+    console.log(`Attempting upload with Pi Serial: ${serial}, filename: ${filename}`);
+    
+    const response = await fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/upload', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Filename': filename,
+        'X-Pi-Serial': serial
+      },
+      body: buffer
+    });
+    
+    if (response.ok) {
+      const totalProbeCount = validProbeData.reduce((sum, d) => sum + d.probed_ssids.length, 0);
+      console.log(`Uploaded probe data successfully as ${filename} (${validProbeData.length} devices, ${totalProbeCount} total probes)`);
+      return true;
+    } else {
+      const errorText = await response.text();
+      console.error(`Upload failed for probe data:`, response.status, errorText);
+      return false;
+    }
+  } catch (error) {
+    console.error(`Error uploading probe data:`, error);
+    return false;
+  }
+}
 
 processKismetDatabase().then((shouldFlush) => {
   if (shouldFlush) {
