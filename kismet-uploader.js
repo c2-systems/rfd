@@ -66,20 +66,27 @@ function processBuffer(obj) {
 
 // Extract probe information from device data
 function extractProbeInfo(deviceData) {
-  const probes = [];
-  
   try {
     // Process the device buffer to get JSON data
     const processedDevice = processBuffer(deviceData.device);
     
     if (!processedDevice) {
-      return probes;
+      return null;
     }
     
     // Extract basic info
     const macaddr = processedDevice['kismet.device.base.macaddr'] || deviceData.devmac;
     const firstTime = processedDevice['kismet.device.base.first_time'] || deviceData.first_time;
     const lastTime = processedDevice['kismet.device.base.last_time'] || deviceData.last_time;
+    
+    // Initialize the probe record for this device
+    const probeRecord = {
+      macaddr: macaddr,
+      first_seen: firstTime,
+      last_seen: lastTime,
+      probed_ssids: [],
+      device_type: deviceData.type
+    };
     
     // Look for probed SSIDs in the dot11 device data
     const dot11Device = processedDevice['dot11.device'];
@@ -90,11 +97,10 @@ function extractProbeInfo(deviceData) {
         
         ssidArray.forEach(ssidRecord => {
           if (ssidRecord && ssidRecord['dot11.probedssid.ssid']) {
-            probes.push({
-              macaddr: macaddr,
-              capture_time: ssidRecord['dot11.probedssid.first_time'] || firstTime,
-              last_seen: ssidRecord['dot11.probedssid.last_time'] || lastTime,
-              probed_ssid: ssidRecord['dot11.probedssid.ssid'],
+            probeRecord.probed_ssids.push({
+              ssid: ssidRecord['dot11.probedssid.ssid'],
+              first_time: ssidRecord['dot11.probedssid.first_time'] || firstTime,
+              last_time: ssidRecord['dot11.probedssid.last_time'] || lastTime,
               encryption: ssidRecord['dot11.probedssid.crypt_string'] || 'Unknown'
             });
           }
@@ -102,61 +108,59 @@ function extractProbeInfo(deviceData) {
       }
       
       // Also check the last probed SSID record as a fallback
-      if (probes.length === 0 && dot11Device['dot11.device.last_probed_ssid_record']) {
+      if (probeRecord.probed_ssids.length === 0 && dot11Device['dot11.device.last_probed_ssid_record']) {
         const lastRecord = dot11Device['dot11.device.last_probed_ssid_record'];
         if (lastRecord['dot11.probedssid.ssid']) {
-          probes.push({
-            macaddr: macaddr,
-            capture_time: lastRecord['dot11.probedssid.first_time'] || firstTime,
-            last_seen: lastRecord['dot11.probedssid.last_time'] || lastTime,
-            probed_ssid: lastRecord['dot11.probedssid.ssid'],
+          probeRecord.probed_ssids.push({
+            ssid: lastRecord['dot11.probedssid.ssid'],
+            first_time: lastRecord['dot11.probedssid.first_time'] || firstTime,
+            last_time: lastRecord['dot11.probedssid.last_time'] || lastTime,
             encryption: lastRecord['dot11.probedssid.crypt_string'] || 'Unknown'
           });
         }
       }
       
       // If device has probed SSIDs but we couldn't extract them
-      if (probes.length === 0 && dot11Device['dot11.device.num_probed_ssids'] > 0) {
-        probes.push({
-          macaddr: macaddr,
-          capture_time: firstTime,
-          last_seen: lastTime,
-          probed_ssid: 'HIDDEN_OR_UNKNOWN',
+      if (probeRecord.probed_ssids.length === 0 && dot11Device['dot11.device.num_probed_ssids'] > 0) {
+        probeRecord.probed_ssids.push({
+          ssid: 'HIDDEN_OR_UNKNOWN',
+          first_time: firstTime,
+          last_time: lastTime,
           encryption: 'Unknown'
         });
       }
     }
     
-    // If no specific probe data found but this is a client device, still record it
-    if (probes.length === 0 && deviceData.type === 'Wi-Fi Client') {
-      probes.push({
-        macaddr: macaddr,
-        capture_time: firstTime,
-        last_seen: lastTime,
-        probed_ssid: null,
-        encryption: null
-      });
-    }
+    // Always return the record, even if no SSIDs found (for Wi-Fi clients)
+    return probeRecord;
     
   } catch (error) {
     console.error('Error extracting probe info for device:', deviceData.devmac, error);
+    return null;
   }
-  
-  return probes;
 }
 
 // Upload probe data
 async function uploadProbeData(probeData) {
   try {
+    // Filter out any null/undefined records and ensure all have probed_ssids arrays
+    const validProbeData = probeData.filter(d => d && d.macaddr).map(d => ({
+      ...d,
+      probed_ssids: d.probed_ssids || []
+    }));
+    
+    console.log(`Preparing to upload ${validProbeData.length} valid device records`);
+    
     const jsonData = JSON.stringify({
       dataType: 'wifi-probe-requests',
       timestamp: new Date().toISOString(),
       piSerial: serial,
-      probes: probeData,
+      probes: validProbeData,
       summary: {
-        totalProbes: probeData.length,
-        uniqueDevices: new Set(probeData.map(p => p.macaddr)).size,
-        uniqueSSIDs: new Set(probeData.map(p => p.probed_ssid).filter(s => s)).size
+        totalDevices: validProbeData.length,
+        devicesWithProbes: validProbeData.filter(d => d.probed_ssids.length > 0).length,
+        totalSSIDs: validProbeData.reduce((sum, d) => sum + d.probed_ssids.length, 0),
+        uniqueSSIDs: new Set(validProbeData.flatMap(d => d.probed_ssids.map(s => s.ssid))).size
       }
     }, null, 2);
     
@@ -177,7 +181,8 @@ async function uploadProbeData(probeData) {
     });
     
     if (response.ok) {
-      console.log(`Uploaded probe data successfully as ${filename} (${probeData.length} devices, ${probeData.reduce((sum, d) => sum + d.probed_ssids.length, 0)} total probes)`);
+      const totalProbeCount = validProbeData.reduce((sum, d) => sum + d.probed_ssids.length, 0);
+      console.log(`Uploaded probe data successfully as ${filename} (${validProbeData.length} devices, ${totalProbeCount} total probes)`);
       return true;
     } else {
       const errorText = await response.text();
@@ -228,20 +233,28 @@ async function processKismetDatabase() {
       const allProbes = [];
       
       for (const deviceRow of deviceRows) {
-        const probes = extractProbeInfo(deviceRow);
-        allProbes.push(...probes);
+        const probeRecord = extractProbeInfo(deviceRow);
+        if (probeRecord) {
+          allProbes.push(probeRecord);
+        }
       }
       
       console.log(`Extracted ${allProbes.length} probe records`);
+      
+      // Debug: check for any problematic records
+      const problemRecords = allProbes.filter(record => !record || !record.probed_ssids);
+      if (problemRecords.length > 0) {
+        console.log(`Warning: Found ${problemRecords.length} records with missing probed_ssids`);
+      }
       
       // Log some sample data for debugging
       if (allProbes.length > 0) {
         console.log('Sample probe records:');
         allProbes.slice(0, 3).forEach((probe, idx) => {
           console.log(`${idx + 1}:`, {
-            macaddr: probe.macaddr,
-            probed_ssids_count: probe.probed_ssids ? probe.probed_ssids.length : 0,
-            sample_ssids: probe.probed_ssids ? probe.probed_ssids.slice(0, 2).map(s => s.ssid) : []
+            macaddr: probe ? probe.macaddr : 'UNDEFINED',
+            probed_ssids_count: probe && probe.probed_ssids ? probe.probed_ssids.length : 'UNDEFINED',
+            sample_ssids: probe && probe.probed_ssids ? probe.probed_ssids.slice(0, 2).map(s => s.ssid) : 'UNDEFINED'
           });
         });
       }
