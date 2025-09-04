@@ -84,40 +84,45 @@ function extractProbeInfo(deviceData) {
     // Look for probed SSIDs in the dot11 device data
     const dot11Device = processedDevice['dot11.device'];
     if (dot11Device) {
-      // Check for probed SSIDs - they might be in different fields
-      const probedSsids = [];
-      
-      // Look for various SSID fields that might contain probe requests
-      if (dot11Device['dot11.device.probed_ssid_map']) {
-        const ssidMap = dot11Device['dot11.device.probed_ssid_map'];
-        for (const [ssid, data] of Object.entries(ssidMap)) {
-          if (ssid && ssid !== '') {
-            probedSsids.push({
-              ssid: ssid,
-              first_time: data.first_time || firstTime,
-              last_time: data.last_time || lastTime
+      // Check for probed SSIDs - they are in an array format
+      if (dot11Device['dot11.device.probed_ssid_map'] && Array.isArray(dot11Device['dot11.device.probed_ssid_map'])) {
+        const ssidArray = dot11Device['dot11.device.probed_ssid_map'];
+        
+        ssidArray.forEach(ssidRecord => {
+          if (ssidRecord && ssidRecord['dot11.probedssid.ssid']) {
+            probes.push({
+              macaddr: macaddr,
+              capture_time: ssidRecord['dot11.probedssid.first_time'] || firstTime,
+              last_seen: ssidRecord['dot11.probedssid.last_time'] || lastTime,
+              probed_ssid: ssidRecord['dot11.probedssid.ssid'],
+              encryption: ssidRecord['dot11.probedssid.crypt_string'] || 'Unknown'
             });
           }
+        });
+      }
+      
+      // Also check the last probed SSID record as a fallback
+      if (probes.length === 0 && dot11Device['dot11.device.last_probed_ssid_record']) {
+        const lastRecord = dot11Device['dot11.device.last_probed_ssid_record'];
+        if (lastRecord['dot11.probedssid.ssid']) {
+          probes.push({
+            macaddr: macaddr,
+            capture_time: lastRecord['dot11.probedssid.first_time'] || firstTime,
+            last_seen: lastRecord['dot11.probedssid.last_time'] || lastTime,
+            probed_ssid: lastRecord['dot11.probedssid.ssid'],
+            encryption: lastRecord['dot11.probedssid.crypt_string'] || 'Unknown'
+          });
         }
       }
       
-      // If we found probed SSIDs, create entries for each
-      if (probedSsids.length > 0) {
-        probedSsids.forEach(ssidInfo => {
-          probes.push({
-            macaddr: macaddr,
-            capture_time: ssidInfo.first_time,
-            last_seen: ssidInfo.last_time,
-            probed_ssid: ssidInfo.ssid
-          });
-        });
-      } else if (dot11Device['dot11.device.num_probed_ssids'] > 0) {
-        // Device has probed SSIDs but we couldn't extract them
+      // If device has probed SSIDs but we couldn't extract them
+      if (probes.length === 0 && dot11Device['dot11.device.num_probed_ssids'] > 0) {
         probes.push({
           macaddr: macaddr,
           capture_time: firstTime,
           last_seen: lastTime,
-          probed_ssid: 'HIDDEN_OR_UNKNOWN'
+          probed_ssid: 'HIDDEN_OR_UNKNOWN',
+          encryption: 'Unknown'
         });
       }
     }
@@ -128,12 +133,13 @@ function extractProbeInfo(deviceData) {
         macaddr: macaddr,
         capture_time: firstTime,
         last_seen: lastTime,
-        probed_ssid: null
+        probed_ssid: null,
+        encryption: null
       });
     }
     
   } catch (error) {
-    console.error('Error extracting probe info:', error);
+    console.error('Error extracting probe info for device:', deviceData.devmac, error);
   }
   
   return probes;
@@ -171,7 +177,7 @@ async function uploadProbeData(probeData) {
     });
     
     if (response.ok) {
-      console.log(`Uploaded probe data successfully as ${filename} (${probeData.length} probe records)`);
+      console.log(`Uploaded probe data successfully as ${filename} (${probeData.length} devices, ${probeData.reduce((sum, d) => sum + d.probed_ssids.length, 0)} total probes)`);
       return true;
     } else {
       const errorText = await response.text();
