@@ -20,6 +20,9 @@ const serial = getRPiSerial();
 let lastProcessedTimestamp = 0;
 const stateFile = '/home/toor/.kismet-uploader-state.json';
 
+// Tables to skip for WiFi probe analysis
+const SKIP_TABLES = ['alerts', 'messages', 'snapshots', 'sqlite_sequence'];
+
 // Load state
 function loadState() {
   try {
@@ -108,11 +111,11 @@ function processBuffer(obj) {
   return result;
 }
 
-// Upload combined data from all tables as one file
+// Upload combined WiFi probe data
 async function uploadCombinedData(allTableData) {
   try {
     const jsonData = JSON.stringify({
-      dataType: 'kismet-combined',
+      dataType: 'kismet-wifi-probes',
       timestamp: new Date().toISOString(),
       piSerial: serial,
       tables: allTableData,
@@ -127,7 +130,7 @@ async function uploadCombinedData(allTableData) {
     
     const buffer = Buffer.from(jsonData, 'utf8');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `kismet-combined-${timestamp}.json`;
+    const filename = `kismet-wifi-probes-${timestamp}.json`;
     
     console.log(`Attempting upload with Pi Serial: ${serial}, filename: ${filename}`);
     
@@ -143,20 +146,20 @@ async function uploadCombinedData(allTableData) {
     
     if (response.ok) {
       const totalRecords = Object.values(allTableData).reduce((sum, records) => sum + records.length, 0);
-      console.log(`Uploaded combined data successfully as ${filename} (${totalRecords} total records)`);
+      console.log(`Uploaded WiFi probe data successfully as ${filename} (${totalRecords} total records)`);
       return true;
     } else {
       const errorText = await response.text();
-      console.error(`Upload failed for combined data:`, response.status, errorText);
+      console.error(`Upload failed for WiFi probe data:`, response.status, errorText);
       return false;
     }
   } catch (error) {
-    console.error(`Error uploading combined data:`, error);
+    console.error(`Error uploading WiFi probe data:`, error);
     return false;
   }
 }
 
-// Process kismet database
+// Process kismet database for WiFi probes
 async function processKismetDatabase() {
   const homeDir = '/home/toor';
   
@@ -185,8 +188,12 @@ async function processKismetDatabase() {
     const db = new Database(dbPath, { readonly: true });
     
     try {
-      // Get all table names
-      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+      // Get all table names, excluding the ones we don't need for WiFi probes
+      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all()
+        .filter(table => !SKIP_TABLES.includes(table.name))
+        .filter(table => !table.name.startsWith('sqlite_'));
+      
+      console.log(`Processing ${tables.length} tables for WiFi probe data (skipping: ${SKIP_TABLES.join(', ')})`);
       
       const allTableData = {};
       let hasNewData = false;
@@ -194,9 +201,6 @@ async function processKismetDatabase() {
       
       for (const table of tables) {
         const tableName = table.name;
-        
-        // Skip system tables
-        if (tableName.startsWith('sqlite_')) continue;
         
         try {
           // Check if table has timestamp-like columns
@@ -273,7 +277,7 @@ async function processKismetDatabase() {
       // Only upload if we have new data
       if (hasNewData) {
         const totalRecords = Object.values(allTableData).reduce((sum, records) => sum + records.length, 0);
-        console.log(`Total new records across all tables: ${totalRecords}`);
+        console.log(`Total new WiFi probe records across all tables: ${totalRecords}`);
         
         const success = await uploadCombinedData(allTableData);
         
@@ -283,7 +287,7 @@ async function processKismetDatabase() {
           console.log(`Updated last processed timestamp to: ${lastProcessedTimestamp}`);
         }
       } else {
-        console.log('No new data found in any table');
+        console.log('No new WiFi probe data found in any table');
       }
       
     } finally {
@@ -304,4 +308,4 @@ setInterval(processKismetDatabase, 5 * 60 * 1000);
 // Also do an initial processing after 1 minute
 setTimeout(processKismetDatabase, 60 * 1000);
 
-console.log('Kismet uploader service started - will process database every 5 minutes');
+console.log('Kismet WiFi probe uploader service started - will process database every 5 minutes (excluding alerts, messages, snapshots)');
