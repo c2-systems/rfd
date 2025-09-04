@@ -111,11 +111,9 @@ function extractProbeInfo(deviceData) {
     
     // Always return the record, even if no SSIDs found (for Wi-Fi clients)
 	if(probeRecord.probed_ssids.length > 0) {
-		return probeRecord;
-	} else {
-		return null;
+		probeRecord.rawProcessedDevice = processedDevice;
 	}
-    
+    return probeRecord;
     
   } catch (error) {
     console.error('Error extracting probe info for device:', deviceData.devmac, error);
@@ -227,8 +225,7 @@ async function uploadProbeData(probeData) {
     });
     
     if (response.ok) {
-      const totalProbeCount = validProbeData.reduce((sum, d) => sum + d.probed_ssids.length, 0);
-      console.log(`Uploaded probe data successfully as ${filename} (${validProbeData.length} devices, ${totalProbeCount} total probes)`);
+      console.log(`Uploaded data successfully as ${filename} (${probeData.length} devices`);
       return true;
     } else {
       const errorText = await response.text();
