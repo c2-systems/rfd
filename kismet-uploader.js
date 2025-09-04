@@ -238,7 +238,11 @@ async function processKismetDatabase() {
       if (allProbes.length > 0) {
         console.log('Sample probe records:');
         allProbes.slice(0, 3).forEach((probe, idx) => {
-          console.log(`${idx + 1}:`, probe);
+          console.log(`${idx + 1}:`, {
+            macaddr: probe.macaddr,
+            probed_ssids_count: probe.probed_ssids ? probe.probed_ssids.length : 0,
+            sample_ssids: probe.probed_ssids ? probe.probed_ssids.slice(0, 2).map(s => s.ssid) : []
+          });
         });
       }
       
