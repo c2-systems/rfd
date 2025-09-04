@@ -110,7 +110,7 @@ function extractProbeInfo(deviceData) {
     }
     
     // Always return the record, even if no SSIDs found (for Wi-Fi clients)
-	if(probeRecord.probed_ssids.length > 0) {
+	if(probeRecord.probed_ssids.length === 0) {
 		probeRecord.rawProcessedDevice = processedDevice;
 	}
     return probeRecord;
