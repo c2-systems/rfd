@@ -49,3 +49,5 @@ sudo systemctl enable kismet-uploader.service
 sudo systemctl status kismet-uplaoder.service
 
 watch -n 5 'du -h /home/toor/*.kismet'
+
+sudo curl -o /home/toor/reloadservicesandconf.sh  https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/reloadservicesandconf.sh
