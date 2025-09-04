@@ -16,38 +16,8 @@ function getRPiSerial() {
 
 const serial = getRPiSerial();
 
-// Track last processed timestamp
-let lastProcessedTimestamp = 0;
-const stateFile = '/home/toor/.kismet-uploader-state.json';
-
 // Tables to skip for WiFi probe analysis
-const SKIP_TABLES = ['alerts', 'messages', 'snapshots', 'sqlite_sequence'];
-
-// Load state
-function loadState() {
-  try {
-    if (fs.existsSync(stateFile)) {
-      const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-      lastProcessedTimestamp = state.lastProcessedTimestamp || 0;
-      console.log(`Loaded state: last processed timestamp ${lastProcessedTimestamp}`);
-    }
-  } catch (error) {
-    console.error('Error loading state:', error);
-    lastProcessedTimestamp = 0;
-  }
-}
-
-// Save state
-function saveState() {
-  try {
-    fs.writeFileSync(stateFile, JSON.stringify({
-      lastProcessedTimestamp: lastProcessedTimestamp,
-      updatedAt: new Date().toISOString()
-    }));
-  } catch (error) {
-    console.error('Error saving state:', error);
-  }
-}
+const SKIP_TABLES = ['alerts', 'messages', 'snapshots', 'sqlite_sequence', 'KISMET'];
 
 // Process Buffer data (similar to extraction script)
 function processBuffer(obj) {
@@ -172,17 +142,17 @@ async function processKismetDatabase() {
     
     if (kismetFiles.length === 0) {
       console.log('No kismet database files found');
-      return;
+      return false;
     }
     
     const latestFile = kismetFiles.sort().pop();
     const dbPath = path.join(homeDir, latestFile);
     
-    console.log(`Processing database: ${latestFile}, last processed timestamp: ${lastProcessedTimestamp}`);
+    console.log(`Processing database: ${latestFile}`);
     
     if (!fs.existsSync(dbPath)) {
       console.log('Database file not found:', dbPath);
-      return;
+      return false;
     }
     
     const db = new Database(dbPath, { readonly: true });
@@ -196,76 +166,31 @@ async function processKismetDatabase() {
       console.log(`Processing ${tables.length} tables for WiFi probe data (skipping: ${SKIP_TABLES.join(', ')})`);
       
       const allTableData = {};
-      let hasNewData = false;
-      let maxTimestamp = lastProcessedTimestamp;
+      let totalRecords = 0;
       
       for (const table of tables) {
         const tableName = table.name;
         
         try {
-          // Check if table has timestamp-like columns
-          const columns = db.prepare(`PRAGMA table_info("${tableName}")`).all();
-          const hasTimestamp = columns.some(col => 
-            col.name.includes('time') || col.name.includes('ts_') || col.name.includes('last_')
-          );
-          
-          let query;
-          let params = [];
-          
-          if (hasTimestamp) {
-            // Try common timestamp column names
-            const timestampColumns = ['ts_sec', 'last_time', 'first_time', 'timestamp'];
-            let timestampCol = null;
-            
-            for (const col of timestampColumns) {
-              const columnExists = columns.some(c => c.name === col);
-              if (columnExists) {
-                timestampCol = col;
-                break;
-              }
-            }
-            
-            if (timestampCol) {
-              query = `SELECT * FROM "${tableName}" WHERE "${timestampCol}" > ? ORDER BY "${timestampCol}" ASC LIMIT 500`;
-              params = [lastProcessedTimestamp];
-            } else {
-              query = `SELECT * FROM "${tableName}" LIMIT 100`;
-            }
-          } else {
-            query = `SELECT * FROM "${tableName}" LIMIT 100`;
-          }
-          
-          const rows = db.prepare(query).all(...params);
+          // Get all records from each table (no timestamp filtering)
+          const query = `SELECT * FROM "${tableName}" LIMIT 1000`;
+          const rows = db.prepare(query).all();
           
           if (rows.length === 0) {
             allTableData[tableName] = [];
             continue;
           }
           
-          // Process buffers with WiFi probe filtering
+          // Process buffers
           const processedRows = rows
-            .map(row => processBuffer(row, true)) // Apply probe filtering
-            .filter(row => row !== null); // Remove filtered out records
+            .map(row => processBuffer(row))
+            .filter(row => row !== null);
           
           allTableData[tableName] = processedRows;
+          totalRecords += processedRows.length;
           
           if (processedRows.length > 0) {
-            hasNewData = true;
-            console.log(`Found ${processedRows.length} new ${tableName} records`);
-            
-            // Update max timestamp if this table has timestamps
-            if (hasTimestamp) {
-              const timestampColumns = ['ts_sec', 'last_time', 'first_time', 'timestamp'];
-              for (const col of timestampColumns) {
-                if (rows[0][col] && typeof rows[0][col] === 'number') {
-                  const tableMaxTimestamp = Math.max(...rows.map(r => r[col] || 0));
-                  if (tableMaxTimestamp > maxTimestamp) {
-                    maxTimestamp = tableMaxTimestamp;
-                  }
-                  break;
-                }
-              }
-            }
+            console.log(`Found ${processedRows.length} ${tableName} records`);
           }
           
         } catch (tableError) {
@@ -274,20 +199,22 @@ async function processKismetDatabase() {
         }
       }
       
-      // Only upload if we have new data
-      if (hasNewData) {
-        const totalRecords = Object.values(allTableData).reduce((sum, records) => sum + records.length, 0);
-        console.log(`Total new WiFi probe records across all tables: ${totalRecords}`);
-        
+      console.log(`Total WiFi probe records across all tables: ${totalRecords}`);
+      
+      // Only upload if we have actual data
+      if (totalRecords > 0) {
         const success = await uploadCombinedData(allTableData);
         
         if (success) {
-          lastProcessedTimestamp = maxTimestamp;
-          saveState();
-          console.log(`Updated last processed timestamp to: ${lastProcessedTimestamp}`);
+          console.log('Upload successful - database can be flushed');
+          return true;
+        } else {
+          console.log('Upload failed - do not flush database');
+          return false;
         }
       } else {
-        console.log('No new WiFi probe data found in any table');
+        console.log('No data found - skipping upload but database can be flushed');
+        return true;
       }
       
     } finally {
@@ -296,16 +223,21 @@ async function processKismetDatabase() {
     
   } catch (error) {
     console.error('Error processing kismet database:', error);
+    return false;
   }
 }
 
-// Load initial state
-loadState();
+// Main execution - run once and exit
+console.log('Kismet WiFi probe uploader starting single run...');
 
-// Process database every 5 minutes
-setInterval(processKismetDatabase, 5 * 60 * 1000);
-
-// Also do an initial processing after 1 minute
-setTimeout(processKismetDatabase, 60 * 1000);
-
-console.log('Kismet WiFi probe uploader service started - will process database every 5 minutes (excluding alerts, messages, snapshots)');
+processKismetDatabase().then((shouldFlush) => {
+  if (shouldFlush) {
+    console.log('Kismet uploader completed successfully - database should be flushed');
+  } else {
+    console.log('Kismet uploader completed - no flush needed');
+  }
+  process.exit(0);
+}).catch((error) => {
+  console.error('Kismet uploader failed:', error);
+  process.exit(1);
+});
