@@ -67,6 +67,9 @@ function processBuffer(obj) {
 // Extract probe information from device data
 function extractProbeInfo(deviceData) {
   try {
+	  
+	const ignoreList = ['Ziggo4953734', 'famgommans'];
+	
     // Process the device buffer to get JSON data
     const processedDevice = processBuffer(deviceData.device);
     
@@ -98,7 +101,7 @@ function extractProbeInfo(deviceData) {
         
         ssidArray.forEach(ssidRecord => {
           if (ssidRecord && ssidRecord['dot11.probedssid.ssid']) {
-			  if( ssidRecord['dot11.probedssid.ssid'] !== 'Ziggo4953734' ) {
+			  if( !ignoreList.includes(ssidRecord['dot11.probedssid.ssid']) ) {
 				probeRecord.probed_ssids.push({
 				  ssid: ssidRecord['dot11.probedssid.ssid'],
 				  first_time: ssidRecord['dot11.probedssid.first_time'] || firstTime,
