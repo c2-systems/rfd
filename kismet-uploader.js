@@ -98,11 +98,13 @@ function extractProbeInfo(deviceData) {
         
         ssidArray.forEach(ssidRecord => {
           if (ssidRecord && ssidRecord['dot11.probedssid.ssid']) {
-            probeRecord.probed_ssids.push({
-              ssid: ssidRecord['dot11.probedssid.ssid'],
-              first_time: ssidRecord['dot11.probedssid.first_time'] || firstTime,
-              last_time: ssidRecord['dot11.probedssid.last_time'] || lastTime
-            });
+			  if( ssidRecord['dot11.probedssid.ssid'] !== 'Ziggo4953734' ) {
+				probeRecord.probed_ssids.push({
+				  ssid: ssidRecord['dot11.probedssid.ssid'],
+				  first_time: ssidRecord['dot11.probedssid.first_time'] || firstTime,
+				  last_time: ssidRecord['dot11.probedssid.last_time'] || lastTime
+				});  
+			  }
           }
         });
       }
