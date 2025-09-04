@@ -70,7 +70,7 @@ function extractProbeInfo(deviceData) {
     // Process the device buffer to get JSON data
     const processedDevice = processBuffer(deviceData.device);
     
-    if (!processedDevice) {
+    if (!processedDevice || deviceData.type === 'Wi-Fi AP') {
       return null;
     }
     
