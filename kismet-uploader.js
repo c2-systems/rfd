@@ -242,10 +242,10 @@ async function processKismetDatabase() {
             continue;
           }
           
-          // Filter out Wi-Fi AP entries and process buffers
+          // Process buffers with WiFi probe filtering
           const processedRows = rows
-            .filter(row => row.type !== "Wi-Fi AP")
-            .map(row => processBuffer(row));
+            .map(row => processBuffer(row, true)) // Apply probe filtering
+            .filter(row => row !== null); // Remove filtered out records
           
           allTableData[tableName] = processedRows;
           
