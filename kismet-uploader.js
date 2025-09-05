@@ -217,7 +217,6 @@ async function uploadProbeData(probeData) {
 
 processKismetDatabase().then((processSuccess) => {
   if (processSuccess) {
-    console.log('Process success');
 	process.exit(0);
   }
 }).catch((error) => {
