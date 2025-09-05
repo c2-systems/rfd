@@ -213,98 +213,13 @@ async function uploadProbeData(probeData) {
   }
 }
 
-processKismetDatabase().then((shouldFlush) => {
-  if (shouldFlush) {
-    console.log('Kismet probe extractor completed successfully - database should be flushed');
-    return flushKismetDatabase();
-  } else {
-    console.log('Kismet probe extractor completed - no flush needed');
-    return Promise.resolve(); // or just: return;
+processKismetDatabase().then((uploadSuccess) => {
+  if (uploadSuccess) {
+    console.log('Upload success');
+	process.exit(0);
   }
-}).then(() => {
-  process.exit(0);
 }).catch((error) => {
   console.error('Kismet probe extractor failed:', error);
   process.exit(1);
 });
 
-async function flushKismetDatabase() {
-  const homeDir = '/home/toor';
-  
-  try {
-    const files = fs.readdirSync(homeDir);
-    const kismetFiles = files.filter(file => 
-      file.startsWith('rpi-kismet') && 
-      file.endsWith('.kismet')
-    );
-    
-    if (kismetFiles.length === 0) {
-      console.log('No kismet database files found to flush');
-      return false;
-    }
-    
-    const latestFile = kismetFiles.sort().pop();
-    const dbPath = path.join(homeDir, latestFile);
-    
-    if (!fs.existsSync(dbPath)) {
-      console.log('Database file not found:', dbPath);
-      return false;
-    }
-    
-    // Open database in read-write mode (remove readonly flag)
-    const db = new Database(dbPath);
-    
-    try {
-      console.log(`Flushing database: ${dbPath}`);
-      
-      // Get all table names from sqlite_master
-      const tablesQuery = `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`;
-      const tables = db.prepare(tablesQuery).all();
-      
-      console.log(`Found ${tables.length} tables to flush`);
-      
-      // Begin transaction for better performance and atomicity
-      const transaction = db.transaction(() => {
-        let flushedCount = 0;
-        
-        for (const table of tables) {
-          try {
-            // Get row count before deletion
-            const countQuery = `SELECT COUNT(*) as count FROM ${table.name}`;
-            const beforeCount = db.prepare(countQuery).get().count;
-            
-            // Delete all rows from the table
-            const deleteQuery = `DELETE FROM ${table.name}`;
-            const result = db.prepare(deleteQuery).run();
-            
-            console.log(`Flushed table '${table.name}': ${beforeCount} rows deleted`);
-            flushedCount += beforeCount;
-            
-          } catch (tableError) {
-            console.error(`Error flushing table '${table.name}':`, tableError.message);
-            // Continue with other tables even if one fails
-          }
-        }
-        
-        console.log(`Successfully flushed ${flushedCount} total rows from ${tables.length} tables`);
-      });
-      
-      // Execute the transaction
-      transaction();
-      
-      // Optional: VACUUM to reclaim disk space
-      console.log('Vacuuming database to reclaim space...');
-      db.exec('VACUUM');
-      
-      console.log('Database flush completed successfully');
-      return true;
-      
-    } finally {
-      db.close();
-    }
-    
-  } catch (error) {
-    console.error('Error flushing kismet database:', error);
-    return false;
-  }
-}
