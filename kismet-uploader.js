@@ -2,6 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
+// State file to track last successful upload
+const STATE_FILE = '/home/toor/last_upload_state.json';
+
 // Get RPi Serial
 function getRPiSerial() {
   try {
@@ -15,6 +18,33 @@ function getRPiSerial() {
 }
 
 const serial = getRPiSerial();
+
+// Load last upload state
+function loadLastUploadState() {
+  try {
+    if (fs.existsSync(STATE_FILE)) {
+      const stateData = fs.readFileSync(STATE_FILE, 'utf8');
+      const state = JSON.parse(stateData);
+      return state.lastUploadTime || 0;
+    }
+  } catch (error) {
+    console.error('Error loading state:', error);
+  }
+  return 0; // Default to 0 (epoch) if no state file or error
+}
+
+// Save last upload state
+function saveLastUploadState(lastTime) {
+  try {
+    const state = {
+      lastUploadTime: lastTime,
+      timestamp: new Date().toISOString()
+    };
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  } catch (error) {
+    console.error('Error saving state:', error);
+  }
+}
 
 // Process Buffer data to extract JSON content
 function processBuffer(obj) {
@@ -67,9 +97,8 @@ function processBuffer(obj) {
 // Extract probe information from device data
 function extractProbeInfo(deviceData) {
   try {
-	  
-	const ignoreList = ['Ziggo4953734', 'famgommans'];
-	
+    const ignoreList = ['Ziggo4953734', 'famgommans'];
+    
     // Process the device buffer to get JSON data
     const processedDevice = processBuffer(deviceData.device);
     
@@ -82,21 +111,17 @@ function extractProbeInfo(deviceData) {
     const firstTime = processedDevice['kismet.device.base.first_time'] || deviceData.first_time;
     const lastTime = processedDevice['kismet.device.base.last_time'] || deviceData.last_time;
 	
-	const basicInfo = {mac: macaddr, first: firstTime, last: lastTime};
+    const basicInfo = {mac: macaddr, first: firstTime, last: lastTime};
         
     const dot11Device = processedDevice['dot11.device'];
 	
     if (dot11Device) {
-		let probeRecord = {...basicInfo, ...dot11Device};
-		
-		probeRecord = removeZeroValues(probeRecord);
-		
-		return probeRecord;
+      let probeRecord = {...basicInfo, ...dot11Device};
+      probeRecord = removeZeroValues(probeRecord);
+      return probeRecord;
     } else {
-		return null;
-	}
-    
-    return probeRecord;
+      return null;
+    }
     
   } catch (error) {
     console.error('Error extracting probe info for device:', deviceData.devmac, error);
@@ -156,7 +181,6 @@ async function processKismetDatabase() {
     const latestFile = kismetFiles.sort().pop();
     const dbPath = path.join(homeDir, latestFile);
     
-    
     if (!fs.existsSync(dbPath)) {
       console.log('Database file not found:', dbPath);
       return false;
@@ -165,33 +189,58 @@ async function processKismetDatabase() {
     const db = new Database(dbPath, { readonly: true });
     
     try {
-      // Focus on device table which should contain the probe information
-      const deviceQuery = `SELECT * FROM devices LIMIT 1000`;
-      const deviceRows = db.prepare(deviceQuery).all();
+      // Load the last upload time
+      const lastUploadTime = loadLastUploadState();
+      console.log(`Filtering records newer than timestamp: ${lastUploadTime}`);
       
+      // Modified query to filter by last_time
+      // Assuming last_time is stored as Unix timestamp in the database
+      const deviceQuery = `
+        SELECT * FROM devices 
+        WHERE last_time > ? 
+        ORDER BY last_time ASC 
+        LIMIT 1000
+      `;
+      
+      const deviceRows = db.prepare(deviceQuery).all(lastUploadTime);
+      console.log(`Found ${deviceRows.length} new records since last upload`);
+      
+      if (deviceRows.length === 0) {
+        console.log('No new records to process');
+        return true; // Success, but no new data
+      }
       
       const allProbes = [];
+      let maxLastTime = lastUploadTime;
       
       for (const deviceRow of deviceRows) {
         const probeRecord = extractProbeInfo(deviceRow);
         if (probeRecord) {
           allProbes.push(probeRecord);
+          // Track the maximum last_time for state saving
+          if (probeRecord.last && probeRecord.last > maxLastTime) {
+            maxLastTime = probeRecord.last;
+          }
         }
       }
       
       console.log(`Extracted ${allProbes.length}/${deviceRows.length} records`);
       
-      
       if (allProbes.length > 0) {
         const success = await uploadProbeData(allProbes);
         
         if (success) {
+          // Save the new last upload time only on successful upload
+          saveLastUploadState(maxLastTime);
+          console.log(`Updated last upload time to: ${maxLastTime}`);
           return true;
         } else {
-          console.log('Upload failed - do not flush database');
+          console.log('Upload failed - do not update state');
           return false;
         }
       } else {
+        // Even if no valid probes extracted, update the timestamp to avoid reprocessing
+        saveLastUploadState(maxLastTime);
         return true;
       }
       
@@ -242,10 +291,9 @@ async function uploadProbeData(probeData) {
 
 processKismetDatabase().then((processSuccess) => {
   if (processSuccess) {
-	process.exit(0);
+    process.exit(0);
   }
 }).catch((error) => {
   console.error('Kismet probe extractor failed:', error);
   process.exit(1);
 });
-
