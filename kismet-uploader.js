@@ -91,6 +91,12 @@ function extractProbeInfo(deviceData) {
 		for (let key in probeRecord) {
 			if (probeRecord[key] === 0) {
 				delete probeRecord[key];
+			} else if (typeof probeRecord[key] === 'object' && probeRecord[key] !== null && !Array.isArray(probeRecord[key])) {
+				for (let nestedKey in probeRecord[key]) {
+					if (probeRecord[key][nestedKey] === 0) {
+						delete probeRecord[key][nestedKey];
+					}
+				}
 			}
 		}
 		return probeRecord;
