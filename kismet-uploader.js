@@ -81,45 +81,18 @@ function extractProbeInfo(deviceData) {
     const macaddr = processedDevice['kismet.device.base.macaddr'] || deviceData.devmac;
     const firstTime = processedDevice['kismet.device.base.first_time'] || deviceData.first_time;
     const lastTime = processedDevice['kismet.device.base.last_time'] || deviceData.last_time;
-    
-    // Initialize the probe record for this device
-    const probeRecord = {
-      macaddr: macaddr,
-      first_seen: firstTime,
-      last_seen: lastTime,
-      probed_ssids: [],
-      device_type: deviceData.type
-    };
-    
-    // Look for probed SSIDs in the dot11 device data
-    const dot11Device = processedDevice['dot11.device'];
-    if (dot11Device) {
-		
-      // Check for probed SSIDs - they are in an array format
-      if (dot11Device['dot11.device.probed_ssid_map'] && Array.isArray(dot11Device['dot11.device.probed_ssid_map'])) {
-        const ssidArray = dot11Device['dot11.device.probed_ssid_map'];
+	
+	const basicInfo = {mac: macaddr, first: firstTime, last: lastTime};
         
-        ssidArray.forEach(ssidRecord => {
-          if (ssidRecord && ssidRecord['dot11.probedssid.ssid']) {
-			  if( !ignoreList.includes(ssidRecord['dot11.probedssid.ssid']) ) {
-				probeRecord.probed_ssids.push({
-				  ssid: ssidRecord['dot11.probedssid.ssid'],
-				  first_time: ssidRecord['dot11.probedssid.first_time'] || firstTime,
-				  last_time: ssidRecord['dot11.probedssid.last_time'] || lastTime
-				});  
-			  }
-          }
-        });
-      }
-      	  
-    }
-    
-    // Always return the record, even if no SSIDs found (for Wi-Fi clients)
-	if(probeRecord.probed_ssids.length === 0) {
-		// probeRecord['rawDot11Device'] = dot11Device;
+    const dot11Device = processedDevice['dot11.device'];
+	
+    if (dot11Device) {
+	  const probeRecord = {...basicInfo, ...dot11Device};
+	  return probeRecord;
+    } else {
 		return null;
 	}
-	
+    
     return probeRecord;
     
   } catch (error) {
@@ -147,7 +120,6 @@ async function processKismetDatabase() {
     const latestFile = kismetFiles.sort().pop();
     const dbPath = path.join(homeDir, latestFile);
     
-    console.log(`Processing database: ${latestFile}`);
     
     if (!fs.existsSync(dbPath)) {
       console.log('Database file not found:', dbPath);
@@ -186,14 +158,13 @@ async function processKismetDatabase() {
         const success = await uploadProbeData(allProbes);
         
         if (success) {
-          console.log('Upload successful - database can be flushed');
           return true;
         } else {
           console.log('Upload failed - do not flush database');
           return false;
         }
       } else {
-        console.log('No probe data found - skipping upload but database can be flushed');
+
         return true;
       }
       
@@ -219,8 +190,6 @@ async function uploadProbeData(probeData) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     const filename = `wifi-probes-${timestamp}.json`;
     
-    console.log(`Attempting upload with Pi Serial: ${serial}, filename: ${filename}`);
-    
     const response = await fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/upload', {
       method: 'POST',
       headers: {
@@ -232,7 +201,6 @@ async function uploadProbeData(probeData) {
     });
     
     if (response.ok) {
-      console.log(`Uploaded data successfully as ${filename} (${probeData.length} devices`);
       return true;
     } else {
       const errorText = await response.text();
@@ -248,11 +216,95 @@ async function uploadProbeData(probeData) {
 processKismetDatabase().then((shouldFlush) => {
   if (shouldFlush) {
     console.log('Kismet probe extractor completed successfully - database should be flushed');
+    return flushKismetDatabase();
   } else {
     console.log('Kismet probe extractor completed - no flush needed');
+    return Promise.resolve(); // or just: return;
   }
+}).then(() => {
   process.exit(0);
 }).catch((error) => {
   console.error('Kismet probe extractor failed:', error);
   process.exit(1);
 });
+
+async function flushKismetDatabase() {
+  const homeDir = '/home/toor';
+  
+  try {
+    const files = fs.readdirSync(homeDir);
+    const kismetFiles = files.filter(file => 
+      file.startsWith('rpi-kismet') && 
+      file.endsWith('.kismet')
+    );
+    
+    if (kismetFiles.length === 0) {
+      console.log('No kismet database files found to flush');
+      return false;
+    }
+    
+    const latestFile = kismetFiles.sort().pop();
+    const dbPath = path.join(homeDir, latestFile);
+    
+    if (!fs.existsSync(dbPath)) {
+      console.log('Database file not found:', dbPath);
+      return false;
+    }
+    
+    // Open database in read-write mode (remove readonly flag)
+    const db = new Database(dbPath);
+    
+    try {
+      console.log(`Flushing database: ${dbPath}`);
+      
+      // Get all table names from sqlite_master
+      const tablesQuery = `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`;
+      const tables = db.prepare(tablesQuery).all();
+      
+      console.log(`Found ${tables.length} tables to flush`);
+      
+      // Begin transaction for better performance and atomicity
+      const transaction = db.transaction(() => {
+        let flushedCount = 0;
+        
+        for (const table of tables) {
+          try {
+            // Get row count before deletion
+            const countQuery = `SELECT COUNT(*) as count FROM ${table.name}`;
+            const beforeCount = db.prepare(countQuery).get().count;
+            
+            // Delete all rows from the table
+            const deleteQuery = `DELETE FROM ${table.name}`;
+            const result = db.prepare(deleteQuery).run();
+            
+            console.log(`Flushed table '${table.name}': ${beforeCount} rows deleted`);
+            flushedCount += beforeCount;
+            
+          } catch (tableError) {
+            console.error(`Error flushing table '${table.name}':`, tableError.message);
+            // Continue with other tables even if one fails
+          }
+        }
+        
+        console.log(`Successfully flushed ${flushedCount} total rows from ${tables.length} tables`);
+      });
+      
+      // Execute the transaction
+      transaction();
+      
+      // Optional: VACUUM to reclaim disk space
+      console.log('Vacuuming database to reclaim space...');
+      db.exec('VACUUM');
+      
+      console.log('Database flush completed successfully');
+      return true;
+      
+    } finally {
+      db.close();
+    }
+    
+  } catch (error) {
+    console.error('Error flushing kismet database:', error);
+    return false;
+  }
+}
