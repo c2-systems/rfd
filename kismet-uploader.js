@@ -88,17 +88,9 @@ function extractProbeInfo(deviceData) {
 	
     if (dot11Device) {
 		let probeRecord = {...basicInfo, ...dot11Device};
-		for (let key in probeRecord) {
-			if (probeRecord[key] === 0) {
-				delete probeRecord[key];
-			} else if (typeof probeRecord[key] === 'object' && probeRecord[key] !== null && !Array.isArray(probeRecord[key])) {
-				for (let nestedKey in probeRecord[key]) {
-					if (probeRecord[key][nestedKey] === 0) {
-						delete probeRecord[key][nestedKey];
-					}
-				}
-			}
-		}
+		
+		probeRecord = removeZeroValues(probeRecord);
+		
 		return probeRecord;
     } else {
 		return null;
@@ -110,6 +102,24 @@ function extractProbeInfo(deviceData) {
     console.error('Error extracting probe info for device:', deviceData.devmac, error);
     return null;
   }
+}
+
+function removeZeroValues(obj) {
+    let trimmedObj = {};
+    
+    for (let key in obj) {
+        if (obj[key] !== 0) {
+            // Check if it's a nested object (not null, not array)
+            if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+                // Apply removeZeroValues to the nested object
+                trimmedObj[key] = removeZeroValues(obj[key]);
+            } else {
+                trimmedObj[key] = obj[key];
+            }
+        } 
+    }
+    
+    return trimmedObj;
 }
 
 // Process kismet database for WiFi probe requests
