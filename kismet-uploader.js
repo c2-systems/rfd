@@ -105,12 +105,27 @@ function extractProbeInfo(deviceData) {
 }
 
 function removeZeroValues(obj) {
+    // Handle arrays
+    if (Array.isArray(obj)) {
+        return obj.map(item => {
+            if (typeof item === 'object' && item !== null) {
+                return removeZeroValues(item);
+            }
+            return item;
+        });
+    }
+    
+    // Handle objects
     let trimmedObj = {};
     
     for (let key in obj) {
         if (obj[key] !== 0) {
+            // Check if it's an array
+            if (Array.isArray(obj[key])) {
+                trimmedObj[key] = removeZeroValues(obj[key]);
+            }
             // Check if it's a nested object (not null, not array)
-            if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+            else if (typeof obj[key] === 'object' && obj[key] !== null) {
                 // Apply removeZeroValues to the nested object
                 trimmedObj[key] = removeZeroValues(obj[key]);
             } else {
