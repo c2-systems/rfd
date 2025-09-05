@@ -138,7 +138,6 @@ async function processKismetDatabase() {
       const deviceQuery = `SELECT * FROM devices LIMIT 1000`;
       const deviceRows = db.prepare(deviceQuery).all();
       
-      console.log(`Found ${deviceRows.length} device records`);
       
       const allProbes = [];
       
@@ -149,7 +148,7 @@ async function processKismetDatabase() {
         }
       }
       
-      console.log(`Extracted ${allProbes.length} probe records`);
+      console.log(`Extracted ${allProbes.length}/${deviceRows.length} records`);
       
       
       if (allProbes.length > 0) {
