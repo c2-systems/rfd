@@ -146,14 +146,7 @@ async function processKismetDatabase() {
       
       console.log(`Extracted ${allProbes.length} probe records`);
       
-      // Debug: check for any problematic records
-      const problemRecords = allProbes.filter(record => !record || !record.probed_ssids);
-      if (problemRecords.length > 0) {
-        console.log(`Warning: Found ${problemRecords.length} records with missing probed_ssids`);
-      }
       
-      
-      // Only upload if we have actual probe data
       if (allProbes.length > 0) {
         const success = await uploadProbeData(allProbes);
         
@@ -164,7 +157,6 @@ async function processKismetDatabase() {
           return false;
         }
       } else {
-
         return true;
       }
       
@@ -213,9 +205,9 @@ async function uploadProbeData(probeData) {
   }
 }
 
-processKismetDatabase().then((uploadSuccess) => {
-  if (uploadSuccess) {
-    console.log('Upload success');
+processKismetDatabase().then((processSuccess) => {
+  if (processSuccess) {
+    console.log('Process success');
 	process.exit(0);
   }
 }).catch((error) => {
