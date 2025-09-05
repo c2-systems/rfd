@@ -87,8 +87,13 @@ function extractProbeInfo(deviceData) {
     const dot11Device = processedDevice['dot11.device'];
 	
     if (dot11Device) {
-	  const probeRecord = {...basicInfo, ...dot11Device};
-	  return probeRecord;
+		let probeRecord = {...basicInfo, ...dot11Device};
+		for (let key in probeRecord) {
+			if (probeRecord[key] === 0) {
+				delete probeRecord[key];
+			}
+		}
+		return probeRecord;
     } else {
 		return null;
 	}
