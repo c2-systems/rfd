@@ -9,7 +9,6 @@ Requires=kismet.service
 Type=simple
 User=toor
 WorkingDirectory=/home/toor
-ExecStartPre=/bin/bash -c 'if [ ! -f kismet-uploader.js ]; then curl -o kismet-uploader.js https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet-uploader.js; fi'
 ExecStart=/bin/bash -c 'while true; do node kismet-uploader.js && systemctl restart kismet; sleep 300; done'
 Restart=on-failure
 RestartSec=10
