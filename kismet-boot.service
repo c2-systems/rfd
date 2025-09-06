@@ -1,5 +1,6 @@
+# kismet-boot.service - Downloads JS file once and manages kismet restarts
 [Unit]
-Description=Download and run kismet boot service
+Description=Kismet manager with periodic restart
 After=network-online.target
 Wants=network-online.target
 
@@ -7,7 +8,9 @@ Wants=network-online.target
 Type=simple
 User=toor
 WorkingDirectory=/home/toor
-ExecStart=/bin/bash -c 'curl -o kismet-boot.js https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet-boot.js && node kismet-boot.js'
+ExecStartPre=/bin/bash -c 'curl -o /home/toor/kismet-boot.js https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet-boot.js'
+ExecStartPre=/usr/bin/node /home/toor/kismet-boot.js
+ExecStart=/bin/bash -c 'while true; do systemctl restart kismet; sleep 180; done'
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
