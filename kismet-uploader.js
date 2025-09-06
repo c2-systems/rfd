@@ -55,12 +55,9 @@ function identifyFilesToDelete(kismetFiles, currentFile) {
   
   // Delete all others except the current file being processed
   for (let i = 0; i < sortedFiles.length - 1; i++) {
-    const fileToCheck = sortedFiles[i];
-    if (fileToCheck !== currentFile) {
-      filesToDelete.push(fileToCheck);
-    }
+	filesToDelete.push(sortedFiles[i]);  // Just delete all older files
   }
-  
+	
   return filesToDelete;
 }
 
