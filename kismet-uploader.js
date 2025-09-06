@@ -85,7 +85,9 @@ function deleteOldFiles(filenames) {
   }
   
   if (deletedCount > 0) {
+	console.log('');
     console.log(`Successfully deleted ${deletedCount} old database files`);
+	console.log('');
   }
 }
 
@@ -323,8 +325,10 @@ async function processKismetDatabase() {
           }
         }
       }
-      
-      console.log(`\nExtracted ${allProbes.length}/${deviceRows.length} records\n`);
+
+	  console.log('');
+      console.log(`Extracted ${allProbes.length}/${deviceRows.length} records`);
+	  console.log('');
       
       if (allProbes.length > 0) {
         const success = await uploadProbeData(allProbes);
