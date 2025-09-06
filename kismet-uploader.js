@@ -178,37 +178,35 @@ function extractProbeInfo(deviceData) {
   }
 }
 
-function deduplicateProbedSSIDs(probes) {
-  return probes.map(probe => {
-    // If the probe doesn't have a probed_ssid_map, return it unchanged
-    if (!probe["dot11.device.probed_ssid_map"]) {
-      return probe;
+function deduplicateProbedSSIDs(probe) {
+  // If the probe doesn't have a probed_ssid_map, return it unchanged
+  if (!probe["dot11.device.probed_ssid_map"]) {
+    return probe;
+  }
+  
+  // Group by SSID and keep the one with latest last_time
+  const ssidGroups = probe["dot11.device.probed_ssid_map"].reduce((acc, ssidEntry) => {
+    const ssid = ssidEntry["dot11.probedssid.ssid"];
+    const lastTime = ssidEntry["dot11.probedssid.last_time"];
+    
+    // If we haven't seen this SSID before, or if this entry is newer, keep it
+    if (!acc[ssid] || lastTime > acc[ssid]["dot11.probedssid.last_time"]) {
+      acc[ssid] = ssidEntry;
     }
     
-    // Group by SSID and keep the one with latest last_time
-    const ssidGroups = probe["dot11.device.probed_ssid_map"].reduce((acc, ssidEntry) => {
-      const ssid = ssidEntry["dot11.probedssid.ssid"];
-      const lastTime = ssidEntry["dot11.probedssid.last_time"];
-      
-      // If we haven't seen this SSID before, or if this entry is newer, keep it
-      if (!acc[ssid] || lastTime > acc[ssid]["dot11.probedssid.last_time"]) {
-        acc[ssid] = ssidEntry;
-      }
-      
-      return acc;
-    }, {});
-    
-    // Convert back to array
-    const deduplicatedArray = Object.values(ssidGroups);
-    
-    // Update the probe object with deduplicated array
-    return {
-      ...probe,
-      "dot11.device.probed_ssid_map": deduplicatedArray,
-      // Also update the num_probed_ssids to reflect the new count
-      "dot11.device.num_probed_ssids": deduplicatedArray.length
-    };
-  });
+    return acc;
+  }, {});
+  
+  // Convert back to array
+  const deduplicatedArray = Object.values(ssidGroups);
+  
+  // Update the probe object with deduplicated array
+  return {
+    ...probe,
+    "dot11.device.probed_ssid_map": deduplicatedArray,
+    // Also update the num_probed_ssids to reflect the new count
+    "dot11.device.num_probed_ssids": deduplicatedArray.length
+  };
 }
 
 function removeZeroValues(obj) {
