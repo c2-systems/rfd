@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Kismet setup script for Raspberry Pi
-echo "Setting up Kismet WiFi probe collection system..."
-
 # Download configuration files
 echo "Downloading configuration files..."
 sudo curl -o /home/toor/kismet.conf https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet.conf
