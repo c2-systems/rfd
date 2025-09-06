@@ -47,6 +47,11 @@ sudo systemctl status wlan1-monitor.service --no-pager -l
 sudo systemctl status kismet-boot.service --no-pager -l
 sudo systemctl status kismet-uploader.service --no-pager -l
 
+# Update this script itself
+echo "Updating setup script..."
+sudo curl -o /home/toor/reloadservicesandconf.sh https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/reloadservicesandconf.sh
+sudo chmod +x /home/toor/reloadservicesandconf.sh
+
 echo "Setup complete!"
 echo "Starting log monitor for kismet-uploader service..."
 journalctl -f -u kismet-uploader.service
