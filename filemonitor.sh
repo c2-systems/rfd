@@ -1,9 +1,12 @@
 #!/bin/bash
 
-# Hard-coded file path - change this to your desired file
-file_path="/home/toor/*.kismet"
-
 while true; do
-    echo "$(date '+%H:%M:%S'): $(du -h "$file_path" | cut -f1)"
-    sleep 5
+   echo "$(date '+%H:%M:%S'):"
+   for file in /home/toor/*.kismet; do
+       if [ -f "$file" ]; then
+           echo "  $(basename "$file"): $(du -h "$file" | cut -f1)"
+       fi
+   done
+   echo ""
+   sleep 5
 done
