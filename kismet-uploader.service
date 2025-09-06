@@ -3,7 +3,6 @@
 Description=Kismet database uploader service
 After=kismet-boot.service
 Wants=kismet-boot.service
-Requires=kismet.service
 
 [Service]
 Type=simple
