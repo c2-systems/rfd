@@ -273,7 +273,7 @@ async function processKismetDatabase() {
   try {
     const files = fs.readdirSync(homeDir);
     const kismetFiles = files.filter(file => 
-      file.startsWith('rpi-kismet') && 
+      file.startsWith('Kismet-') && 
       file.endsWith('.kismet')
     );
     
