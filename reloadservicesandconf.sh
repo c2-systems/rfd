@@ -30,7 +30,7 @@ sudo systemctl stop wlan1-monitor.service 2>/dev/null || true
 # Enable services
 echo "Enabling services..."
 sudo systemctl enable wlan1-monitor.service
-sudo systemctl enable kismet-boot.service
+# kismet-boot.service should net be enabled - called from wlan1 service
 sudo systemctl enable kismet-uploader.service
 
 # Start services in correct order
