@@ -8,7 +8,7 @@ Wants=kismet-boot.service
 Type=simple
 User=toor
 WorkingDirectory=/home/toor
-ExecStart=/bin/bash -c 'kismet --capture-source wlan1 --no-ncurses --config-file /home/toor/kismet.conf & KISMET_PID=$!; while true; do node kismet-uploader.js && kill $KISMET_PID && sleep 2 && kismet --capture-source wlan1 --no-ncurses --config-file /home/toor/kismet.conf & KISMET_PID=$!; sleep 300; done'
+ExecStart=/bin/bash -c 'while true; do kismet --capture-source wlan1 --no-ncurses --config-file /home/toor/kismet.conf & KISMET_PID=$!; sleep 10; node kismet-uploader.js; kill $KISMET_PID 2>/dev/null || pkill -f "kismet.*wlan1"; wait $KISMET_PID 2>/dev/null; sleep 5; done'
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
