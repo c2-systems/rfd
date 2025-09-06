@@ -53,9 +53,8 @@ function identifyFilesToDelete(kismetFiles, currentFile) {
   // Sort files by creation time (filename contains timestamp)
   const sortedFiles = kismetFiles.sort();
   
-  // Keep only the latest 2 files (current + 1 backup)
   // Delete all others except the current file being processed
-  for (let i = 0; i < sortedFiles.length - 2; i++) {
+  for (let i = 0; i < sortedFiles.length - 1; i++) {
     const fileToCheck = sortedFiles[i];
     if (fileToCheck !== currentFile) {
       filesToDelete.push(fileToCheck);
