@@ -1,7 +1,7 @@
 # kismet-uploader.service - Uploads data and manages kismet lifecycle
 [Unit]
 Description=Kismet database uploader service
-After=kismet-boot.service kismet.service
+After=kismet-boot.service
 Wants=kismet-boot.service
 Requires=kismet.service
 
