@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # Download configuration files
 echo "Downloading configuration files..."
 sudo curl -o /home/toor/kismet.conf https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet.conf
@@ -24,24 +23,22 @@ sudo systemctl stop kismet-uploader.service 2>/dev/null || true
 sudo systemctl stop kismet-boot.service 2>/dev/null || true
 sudo systemctl stop wlan1-monitor.service 2>/dev/null || true
 
-# Enable services
+# Enable services (kismet-boot should NOT be enabled - it's called by wlan1-monitor)
 echo "Enabling services..."
 sudo systemctl enable wlan1-monitor.service
-# kismet-boot.service should net be enabled - called from wlan1 service
 sudo systemctl enable kismet-uploader.service
 
-# Start services in correct order
+# Start ONLY the wlan1-monitor service - it will trigger the chain
 echo "Starting services..."
 sudo systemctl start wlan1-monitor.service
-sleep 2
-sudo systemctl start kismet-boot.service
-sleep 2
-sudo systemctl start kismet-uploader.service
+
+# Wait for the chain to complete
+sleep 5
 
 # Check status
 echo "Checking service status..."
 sudo systemctl status wlan1-monitor.service --no-pager -l
-sudo systemctl status kismet-boot.service --no-pager -l
+sudo systemctl status kismet-boot.service --no-pager -l  
 sudo systemctl status kismet-uploader.service --no-pager -l
 
 # Update this script itself
