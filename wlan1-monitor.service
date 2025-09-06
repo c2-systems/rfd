@@ -1,3 +1,4 @@
+
 [Unit]
 Description=Set wlan1 to monitor mode and start script
 After=network.target
@@ -7,9 +8,9 @@ Wants=network.target
 Type=oneshot
 User=root
 ExecStart=/bin/bash -c 'while ! ip link show wlan1 >/dev/null 2>&1; do echo "Waiting for wlan1..."; sleep 2; done; echo "Found wlan1, setting to monitor mode..."; ip link set wlan1 down && echo "Interface down" && iw dev wlan1 set type monitor && echo "Monitor mode set" && ip link set wlan1 up && echo "Interface up" && iwconfig wlan1'
-ExecStartPost=/bin/systemctl start kismet-boot.service
+ExecStartPost=/bin/systemctl start --no-block kismet-boot.service
 RemainAfterExit=true
-TimeoutStartSec=60
+TimeoutStartSec=180
 
 [Install]
 WantedBy=multi-user.target
