@@ -1,4 +1,4 @@
-# kismet-uploader.service - Uploads data and triggers restarts
+# kismet-uploader.service - Uploads data and manages kismet lifecycle
 [Unit]
 Description=Kismet database uploader service
 After=kismet-boot.service kismet.service
@@ -9,7 +9,7 @@ Requires=kismet.service
 Type=simple
 User=toor
 WorkingDirectory=/home/toor
-ExecStart=/bin/bash -c 'while true; do node kismet-uploader.js && systemctl restart kismet; sleep 300; done'
+ExecStart=/bin/bash -c 'systemctl start kismet; while true; do node kismet-uploader.js && systemctl restart kismet; sleep 300; done'
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
