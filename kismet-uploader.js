@@ -324,7 +324,7 @@ async function processKismetDatabase() {
         }
       }
       
-      console.log(`Extracted ${allProbes.length}/${deviceRows.length} records`);
+      console.log(`\nExtracted ${allProbes.length}/${deviceRows.length} records\n`);
       
       if (allProbes.length > 0) {
         const success = await uploadProbeData(allProbes);
