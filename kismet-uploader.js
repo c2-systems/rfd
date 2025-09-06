@@ -164,6 +164,7 @@ function extractProbeInfo(deviceData) {
 		
 		probeRecord = removeZeroValues(probeRecord);
 		probeRecord = deduplicateProbedSSIDs(probeRecord);
+		probeRecord = simplifyClientMap(probeRecord);
 		
 		return probeRecord;
     } else {
@@ -240,6 +241,29 @@ function removeZeroValues(obj) {
     }
     
     return trimmedObj;
+}
+
+
+function simplifyClientMap(device) {
+  // If the device doesn't have a client_map or last_bssid, return it unchanged
+  if (!device["dot11.device.client_map"] || !device["dot11.device.last_bssid"]) {
+    return device;
+  }
+  
+  const clientMap = device["dot11.device.client_map"];
+  const lastBssid = device["dot11.device.last_bssid"];
+  
+  // Check if there's exactly one entry in the client map and it matches the last_bssid
+  const clientMapKeys = Object.keys(clientMap);
+  if (clientMapKeys.length === 1 && clientMap.hasOwnProperty(lastBssid)) {
+    const clientEntry = clientMap[lastBssid];
+    device["dot11.client.bssid_key"] = clientEntry["dot11.client.bssid_key"];
+    delete device["dot11.device.client_map"];
+    return device;
+  }
+  
+  // If conditions aren't met, return the device unchanged
+  return device;
 }
 
 // Process kismet database for WiFi probe requests
