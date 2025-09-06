@@ -1,15 +1,12 @@
 #!/bin/bash
 # Download configuration files
 echo "Downloading configuration files..."
-sudo curl -o /home/toor/kismet.conf https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet.conf
+
 sudo curl -o /usr/local/etc/kismet_logging.conf https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet_logging.conf
 sudo curl -o /etc/systemd/system/wlan1-monitor.service https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/wlan1-monitor.service
 sudo curl -o /etc/systemd/system/kismet-boot.service https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet-boot.service
 sudo curl -o /etc/systemd/system/kismet-uploader.service https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/kismet-uploader.service
 sudo curl -o /home/toor/filemonitor.sh https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/filemonitor.sh
-
-# Set correct ownership for kismet.conf
-sudo chown toor:toor /home/toor/kismet.conf
 
 # Make filemonitor executable
 sudo chmod +x /home/toor/filemonitor.sh
