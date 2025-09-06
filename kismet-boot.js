@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
 
 // Get RPi Serial
 function getRPiSerial() {
@@ -17,15 +16,18 @@ function getRPiSerial() {
 const serial = getRPiSerial();
 
 // Send boot notification
-fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/boot', {
-  headers: {
-    'X-Pi-Serial': serial
+async function sendBootNotification() {
+  try {
+    await fetch('https://expressapp-igdj5fhnlq-ey.a.run.app/boot', {
+      headers: {
+        'X-Pi-Serial': serial
+      }
+    });
+    console.log('Boot notification sent');
+  } catch (err) {
+    console.error('Boot notification failed:', err);
   }
-}).then(() => {
-  console.log('Boot notification sent');
-}).catch(err => {
-  console.error('Boot notification failed:', err);
-});
+}
 
 // Delete all existing kismet files after boot
 function cleanupKismetFiles() {
@@ -44,36 +46,21 @@ function cleanupKismetFiles() {
   }
 }
 
-// Clean up old files
-cleanupKismetFiles();
-
-function startKismet() {
-  const kismetProcess = spawn('kismet', [
-    '--capture-source', 'wlan1',
-    '--no-ncurses',  
-    '--config-file', '/home/toor/kismet.conf'
-  ], {
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-
-  kismetProcess.stdout.on('data', (data) => {
-    console.log(`Kismet: ${data}`);
-  });
-
-  kismetProcess.stderr.on('data', (data) => {
-    console.error(`Kismet error: ${data}`);
-  });
-
-  kismetProcess.on('close', (code) => {
-    console.log(`Kismet process exited with code ${code}`);
-    // Restart Kismet if it crashes
-    console.log('Restarting Kismet...');
-    setTimeout(startKismet, 5000);
-  });
-
-  return kismetProcess;
+// Main execution
+async function main() {
+  console.log('Starting kismet boot setup...');
+  
+  // Send boot notification
+  await sendBootNotification();
+  
+  // Clean up old files
+  cleanupKismetFiles();
+  
+  console.log('Kismet boot setup completed. Uploader will handle kismet startup.');
+  process.exit(0);
 }
 
-// Start Kismet
-const kismet = startKismet();
-console.log('Kismet started successfully');
+main().catch(error => {
+  console.error('Kismet boot setup failed:', error);
+  process.exit(1);
+});
