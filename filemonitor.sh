@@ -7,5 +7,5 @@ while true; do
        fi
    done
    echo ""
-   sleep 5
+   sleep 60
 done
