@@ -31,6 +31,7 @@ sudo systemctl enable kismet-uploader.service
 # Start ONLY the wlan1-monitor service - it will trigger the chain
 echo "Starting services..."
 sudo systemctl start wlan1-monitor.service
+sudo systemctl start kismet-uploader.service
 
 # Wait for the chain to complete
 sleep 5
