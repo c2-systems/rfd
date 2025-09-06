@@ -49,5 +49,7 @@ sudo curl -o /home/toor/reloadservicesandconf.sh https://raw.githubusercontent.c
 sudo chmod +x /home/toor/reloadservicesandconf.sh
 
 echo "Setup complete!"
+sleep 10
+
 echo "Starting log monitor for kismet-uploader service..."
 journalctl -f -u kismet-uploader.service
