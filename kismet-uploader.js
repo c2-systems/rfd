@@ -46,6 +46,49 @@ function saveLastUploadState(lastTime) {
   }
 }
 
+// Identify old files that can be deleted
+function identifyFilesToDelete(kismetFiles, currentFile) {
+  const filesToDelete = [];
+  
+  // Sort files by creation time (filename contains timestamp)
+  const sortedFiles = kismetFiles.sort();
+  
+  // Keep only the latest 2 files (current + 1 backup)
+  // Delete all others except the current file being processed
+  for (let i = 0; i < sortedFiles.length - 2; i++) {
+    const fileToCheck = sortedFiles[i];
+    if (fileToCheck !== currentFile) {
+      filesToDelete.push(fileToCheck);
+    }
+  }
+  
+  return filesToDelete;
+}
+
+// Delete old database files
+function deleteOldFiles(filenames) {
+  const homeDir = '/home/toor';
+  let deletedCount = 0;
+  
+  for (const filename of filenames) {
+    try {
+      const filePath = path.join(homeDir, filename);
+      
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`Deleted: ${filename}`);
+        deletedCount++;
+      }
+    } catch (error) {
+      console.error(`Error deleting file ${filename}:`, error);
+    }
+  }
+  
+  if (deletedCount > 0) {
+    console.log(`Successfully deleted ${deletedCount} old database files`);
+  }
+}
+
 // Process Buffer data to extract JSON content
 function processBuffer(obj) {
   if (!obj || typeof obj !== 'object') return obj;
@@ -120,6 +163,7 @@ function extractProbeInfo(deviceData) {
 		let probeRecord = {...basicInfo, ...dot11Device};
 		
 		probeRecord = removeZeroValues(probeRecord);
+		probeRecord = deduplicateProbedSSIDs(probeRecord);
 		
 		return probeRecord;
     } else {
@@ -132,6 +176,39 @@ function extractProbeInfo(deviceData) {
     console.error('Error extracting probe info for device:', deviceData.devmac, error);
     return null;
   }
+}
+
+function deduplicateProbedSSIDs(probes) {
+  return probes.map(probe => {
+    // If the probe doesn't have a probed_ssid_map, return it unchanged
+    if (!probe["dot11.device.probed_ssid_map"]) {
+      return probe;
+    }
+    
+    // Group by SSID and keep the one with latest last_time
+    const ssidGroups = probe["dot11.device.probed_ssid_map"].reduce((acc, ssidEntry) => {
+      const ssid = ssidEntry["dot11.probedssid.ssid"];
+      const lastTime = ssidEntry["dot11.probedssid.last_time"];
+      
+      // If we haven't seen this SSID before, or if this entry is newer, keep it
+      if (!acc[ssid] || lastTime > acc[ssid]["dot11.probedssid.last_time"]) {
+        acc[ssid] = ssidEntry;
+      }
+      
+      return acc;
+    }, {});
+    
+    // Convert back to array
+    const deduplicatedArray = Object.values(ssidGroups);
+    
+    // Update the probe object with deduplicated array
+    return {
+      ...probe,
+      "dot11.device.probed_ssid_map": deduplicatedArray,
+      // Also update the num_probed_ssids to reflect the new count
+      "dot11.device.num_probed_ssids": deduplicatedArray.length
+    };
+  });
 }
 
 function removeZeroValues(obj) {
@@ -186,6 +263,8 @@ async function processKismetDatabase() {
     const latestFile = kismetFiles.sort().pop();
     const dbPath = path.join(homeDir, latestFile);
     
+    // Identify files that can be deleted (keep latest 2 files)
+    const filesToDelete = identifyFilesToDelete(kismetFiles, latestFile);
     
     if (!fs.existsSync(dbPath)) {
       console.log('Database file not found:', dbPath);
@@ -223,7 +302,7 @@ async function processKismetDatabase() {
         }
       }
       
-      console.log(`${allProbes.length}/${deviceRows.length} records in ${latestFile}`);
+      console.log(`Extracted ${allProbes.length}/${deviceRows.length} records`);
       
       if (allProbes.length > 0) {
         const success = await uploadProbeData(allProbes);
@@ -244,6 +323,12 @@ async function processKismetDatabase() {
       
     } finally {
       db.close();
+      
+      // Delete old files after successful processing and database closure
+      if (filesToDelete.length > 0) {
+        console.log(`Found ${filesToDelete.length} old files to delete:`, filesToDelete);
+        deleteOldFiles(filesToDelete);
+      }
     }
     
   } catch (error) {
