@@ -183,14 +183,22 @@ function deduplicateProbedSSIDs(probe) {
     return probe;
   }
   
-  // Group by SSID and keep the one with latest last_time
+  // Group by SSID and merge entries to keep highest last_time and lowest first_time
   const ssidGroups = probe["dot11.device.probed_ssid_map"].reduce((acc, ssidEntry) => {
     const ssid = ssidEntry["dot11.probedssid.ssid"];
     const lastTime = ssidEntry["dot11.probedssid.last_time"];
+    const firstTime = ssidEntry["dot11.probedssid.first_time"];
     
-    // If we haven't seen this SSID before, or if this entry is newer, keep it
-    if (!acc[ssid] || lastTime > acc[ssid]["dot11.probedssid.last_time"]) {
-      acc[ssid] = ssidEntry;
+    if (!acc[ssid]) {
+      // First time seeing this SSID, just store it
+      acc[ssid] = { ...ssidEntry };
+    } else {
+      // Merge with existing entry
+      acc[ssid] = {
+        ...acc[ssid], // Keep all other properties from the existing entry
+        "dot11.probedssid.last_time": Math.max(lastTime, acc[ssid]["dot11.probedssid.last_time"]),
+        "dot11.probedssid.first_time": Math.min(firstTime, acc[ssid]["dot11.probedssid.first_time"])
+      };
     }
     
     return acc;
