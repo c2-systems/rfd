@@ -162,7 +162,7 @@ function extractProbeInfo(deviceData) {
 		
 		probeRecord = removeZeroValues(probeRecord);
 		probeRecord = deduplicateProbedSSIDs(probeRecord);
-		probeRecord = simplifyClientMap(probeRecord);
+		probeRecord = deduplicateClientMap(probeRecord);
 		
 		return probeRecord;
     } else {
@@ -250,26 +250,47 @@ function removeZeroValues(obj) {
 }
 
 
-function simplifyClientMap(device) {
-  // If the device doesn't have a client_map or last_bssid, return it unchanged
-  if (!device["dot11.device.client_map"] || !device["dot11.device.last_bssid"]) {
+function deduplicateClientMap(device) {
+  // If the device doesn't have a client_map, return it unchanged
+  if (!device["dot11.device.client_map"]) {
     return device;
   }
   
-  const clientMap = device["dot11.device.client_map"];
-  const lastBssid = device["dot11.device.last_bssid"];
+  // Group by BSSID and merge entries to keep highest last_time and lowest first_time
+  const bssidGroups = {};
   
-  // Check if there's exactly one entry in the client map and it matches the last_bssid
-  const clientMapKeys = Object.keys(clientMap);
-  if (clientMapKeys.length === 1 && clientMap.hasOwnProperty(lastBssid)) {
-    const clientEntry = clientMap[lastBssid];
-    device["dot11.client.bssid_key"] = clientEntry["dot11.client.bssid_key"];
-    delete device["dot11.device.client_map"];
-    return device;
-  }
+  Object.values(device["dot11.device.client_map"]).forEach(clientEntry => {
+    const bssid = clientEntry["dot11.client.bssid"];
+    const lastTime = clientEntry["dot11.client.last_time"];
+    const firstTime = clientEntry["dot11.client.first_time"];
+    
+    if (!bssidGroups[bssid]) {
+      // First time seeing this BSSID, just store it
+      bssidGroups[bssid] = { ...clientEntry };
+    } else {
+      // Merge with existing entry
+      bssidGroups[bssid] = {
+        ...bssidGroups[bssid], // Keep all other properties from the existing entry
+        "dot11.client.last_time": Math.max(lastTime, bssidGroups[bssid]["dot11.client.last_time"]),
+        "dot11.client.first_time": Math.min(firstTime, bssidGroups[bssid]["dot11.client.first_time"])
+      };
+    }
+  });
   
-  // If conditions aren't met, return the device unchanged
-  return device;
+  // Convert back to the original object structure with BSSID as keys
+  const deduplicatedClientMap = {};
+  Object.values(bssidGroups).forEach(clientEntry => {
+    const bssid = clientEntry["dot11.client.bssid"];
+    deduplicatedClientMap[bssid] = clientEntry;
+  });
+  
+  // Update the device object with deduplicated client map
+  return {
+    ...device,
+    "dot11.device.client_map": deduplicatedClientMap,
+    // Also update the num_client_aps to reflect the new count
+    "dot11.device.num_client_aps": Object.keys(deduplicatedClientMap).length
+  };
 }
 
 // Process kismet database for WiFi probe requests
