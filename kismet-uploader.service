@@ -8,7 +8,28 @@ Wants=kismet-boot.service
 Type=simple
 User=toor
 WorkingDirectory=/home/toor
-ExecStart=/bin/bash -c 'while true; do kismet --capture-source wlan1 --no-ncurses & KISMET_PID=$!; sleep 300; node kismet-uploader.js; kill $KISMET_PID 2>/dev/null || pkill -f "kismet.*wlan1"; wait $KISMET_PID 2>/dev/null; sleep 5; done'
+ExecStart=/bin/bash -c '\
+while true; do \
+  echo "Checking wlan1 monitor mode..."; \
+  CURRENT_MODE=$(iw dev wlan1 info | grep type | awk "{print \$2}"); \
+  if [ "$CURRENT_MODE" != "monitor" ]; then \
+    echo "wlan1 not in monitor mode (currently: $CURRENT_MODE), fixing..."; \
+    sudo ip link set wlan1 down && \
+    sudo iw dev wlan1 set type monitor && \
+    sudo ip link set wlan1 up && \
+    echo "Set wlan1 to monitor mode"; \
+  else \
+    echo "wlan1 already in monitor mode"; \
+  fi; \
+  iwconfig wlan1; \
+  kismet --capture-source wlan1 --no-ncurses & \
+  KISMET_PID=$!; \
+  sleep 300; \
+  node kismet-uploader.js; \
+  kill $KISMET_PID 2>/dev/null || pkill -f "kismet.*wlan1"; \
+  wait $KISMET_PID 2>/dev/null; \
+  sleep 5; \
+done'
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
