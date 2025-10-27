@@ -30,7 +30,7 @@ while true; do \
   wait $KISMET_PID 2>/dev/null; \
   sleep 5; \
 done'
-Restart=on-failure
+Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
