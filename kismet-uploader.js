@@ -5,6 +5,10 @@ const Database = require('better-sqlite3');
 // State file to track last successful upload
 const STATE_FILE = '/home/toor/last_upload_state.json';
 
+// Rate limiting: delay between processing old files (in milliseconds)
+const BACKLOG_PROCESSING_DELAY = 2000; // 2 seconds between each old file
+const BACKLOG_BATCH_SIZE = 1000; // Records per batch
+
 // Get RPi Serial
 function getRPiSerial() {
   try {
@@ -46,19 +50,9 @@ function saveLastUploadState(lastTime) {
   }
 }
 
-// Identify old files that can be deleted
-function identifyFilesToDelete(kismetFiles, currentFile) {
-  const filesToDelete = [];
-  
-  // Sort files by creation time (filename contains timestamp)
-  const sortedFiles = kismetFiles.sort();
-  
-  // Delete all others except the current file being processed
-  for (let i = 0; i < sortedFiles.length - 1; i++) {
-	filesToDelete.push(sortedFiles[i]);  // Just delete all older files
-  }
-	
-  return filesToDelete;
+// Helper function to sleep/delay
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Delete old database files
@@ -81,9 +75,9 @@ function deleteOldFiles(filenames) {
   }
   
   if (deletedCount > 0) {
-	console.log('');
+    console.log('');
     console.log(`Successfully deleted ${deletedCount} old database files`);
-	console.log('');
+    console.log('');
   }
 }
 
@@ -138,9 +132,8 @@ function processBuffer(obj) {
 // Extract probe information from device data
 function extractProbeInfo(deviceData) {
   try {
-	  
-	const ignoreList = ['Ziggo4953734', 'famgommans'];
-	
+    const ignoreList = ['Ziggo4953734', 'famgommans'];
+    
     // Process the device buffer to get JSON data
     const processedDevice = processBuffer(deviceData.device);
     
@@ -152,24 +145,22 @@ function extractProbeInfo(deviceData) {
     const macaddr = processedDevice['kismet.device.base.macaddr'] || deviceData.devmac;
     const firstTime = processedDevice['kismet.device.base.first_time'] || deviceData.first_time;
     const lastTime = processedDevice['kismet.device.base.last_time'] || deviceData.last_time;
-	
-	const basicInfo = {mac: macaddr, first: firstTime, last: lastTime};
+    
+    const basicInfo = {mac: macaddr, first: firstTime, last: lastTime};
         
     const dot11Device = processedDevice['dot11.device'];
-	
-    if (dot11Device) {
-		let probeRecord = {...basicInfo, ...dot11Device};
-		
-		probeRecord = removeZeroValues(probeRecord);
-		probeRecord = deduplicateProbedSSIDs(probeRecord);
-		probeRecord = deduplicateClientMap(probeRecord);
-		
-		return probeRecord;
-    } else {
-		return null;
-	}
     
-    return probeRecord;
+    if (dot11Device) {
+      let probeRecord = {...basicInfo, ...dot11Device};
+      
+      probeRecord = removeZeroValues(probeRecord);
+      probeRecord = deduplicateProbedSSIDs(probeRecord);
+      probeRecord = deduplicateClientMap(probeRecord);
+      
+      return probeRecord;
+    } else {
+      return null;
+    }
     
   } catch (error) {
     console.error('Error extracting probe info for device:', deviceData.devmac, error);
@@ -178,24 +169,20 @@ function extractProbeInfo(deviceData) {
 }
 
 function deduplicateProbedSSIDs(probe) {
-  // If the probe doesn't have a probed_ssid_map, return it unchanged
   if (!probe["dot11.device.probed_ssid_map"]) {
     return probe;
   }
   
-  // Group by SSID and merge entries to keep highest last_time and lowest first_time
   const ssidGroups = probe["dot11.device.probed_ssid_map"].reduce((acc, ssidEntry) => {
     const ssid = ssidEntry["dot11.probedssid.ssid"];
     const lastTime = ssidEntry["dot11.probedssid.last_time"];
     const firstTime = ssidEntry["dot11.probedssid.first_time"];
     
     if (!acc[ssid]) {
-      // First time seeing this SSID, just store it
       acc[ssid] = { ...ssidEntry };
     } else {
-      // Merge with existing entry
       acc[ssid] = {
-        ...acc[ssid], // Keep all other properties from the existing entry
+        ...acc[ssid],
         "dot11.probedssid.last_time": Math.max(lastTime, acc[ssid]["dot11.probedssid.last_time"]),
         "dot11.probedssid.first_time": Math.min(firstTime, acc[ssid]["dot11.probedssid.first_time"])
       };
@@ -204,20 +191,16 @@ function deduplicateProbedSSIDs(probe) {
     return acc;
   }, {});
   
-  // Convert back to array
   const deduplicatedArray = Object.values(ssidGroups);
   
-  // Update the probe object with deduplicated array
   return {
     ...probe,
     "dot11.device.probed_ssid_map": deduplicatedArray,
-    // Also update the num_probed_ssids to reflect the new count
     "dot11.device.num_probed_ssids": deduplicatedArray.length
   };
 }
 
 function removeZeroValues(obj) {
-    // Handle arrays
     if (Array.isArray(obj)) {
         return obj.map(item => {
             if (typeof item === 'object' && item !== null) {
@@ -227,18 +210,14 @@ function removeZeroValues(obj) {
         });
     }
     
-    // Handle objects
     let trimmedObj = {};
     
     for (let key in obj) {
         if (obj[key] !== 0) {
-            // Check if it's an array
             if (Array.isArray(obj[key])) {
                 trimmedObj[key] = removeZeroValues(obj[key]);
             }
-            // Check if it's a nested object (not null, not array)
             else if (typeof obj[key] === 'object' && obj[key] !== null) {
-                // Apply removeZeroValues to the nested object
                 trimmedObj[key] = removeZeroValues(obj[key]);
             } else {
                 trimmedObj[key] = obj[key];
@@ -249,14 +228,11 @@ function removeZeroValues(obj) {
     return trimmedObj;
 }
 
-
 function deduplicateClientMap(device) {
-  // If the device doesn't have a client_map, return it unchanged
   if (!device["dot11.device.client_map"]) {
     return device;
   }
   
-  // Group by BSSID and merge entries to keep highest last_time and lowest first_time
   const bssidGroups = {};
   
   Object.values(device["dot11.device.client_map"]).forEach(clientEntry => {
@@ -265,35 +241,63 @@ function deduplicateClientMap(device) {
     const firstTime = clientEntry["dot11.client.first_time"];
     
     if (!bssidGroups[bssid]) {
-      // First time seeing this BSSID, just store it
       bssidGroups[bssid] = { ...clientEntry };
     } else {
-      // Merge with existing entry
       bssidGroups[bssid] = {
-        ...bssidGroups[bssid], // Keep all other properties from the existing entry
+        ...bssidGroups[bssid],
         "dot11.client.last_time": Math.max(lastTime, bssidGroups[bssid]["dot11.client.last_time"]),
         "dot11.client.first_time": Math.min(firstTime, bssidGroups[bssid]["dot11.client.first_time"])
       };
     }
   });
   
-  // Convert back to the original object structure with BSSID as keys
   const deduplicatedClientMap = {};
   Object.values(bssidGroups).forEach(clientEntry => {
     const bssid = clientEntry["dot11.client.bssid"];
     deduplicatedClientMap[bssid] = clientEntry;
   });
   
-  // Update the device object with deduplicated client map
   return {
     ...device,
     "dot11.device.client_map": deduplicatedClientMap,
-    // Also update the num_client_aps to reflect the new count
     "dot11.device.num_client_aps": Object.keys(deduplicatedClientMap).length
   };
 }
 
-// Process kismet database for WiFi probe requests
+// Process a single database file
+async function processSingleDatabaseFile(dbPath, lastUploadTime) {
+  const db = new Database(dbPath, { readonly: true });
+  
+  try {
+    const deviceQuery = `
+      SELECT * FROM devices 
+      WHERE last_time > ? 
+      ORDER BY last_time ASC 
+      LIMIT ?
+    `;
+    
+    const deviceRows = db.prepare(deviceQuery).all(lastUploadTime, BACKLOG_BATCH_SIZE);
+    
+    const allProbes = [];
+    let maxLastTime = lastUploadTime;
+    
+    for (const deviceRow of deviceRows) {
+      const probeRecord = extractProbeInfo(deviceRow);
+      if (probeRecord) {
+        allProbes.push(probeRecord);
+        if (probeRecord.last && probeRecord.last > maxLastTime) {
+          maxLastTime = probeRecord.last;
+        }
+      }
+    }
+    
+    return { allProbes, maxLastTime };
+  } finally {
+    db.close();
+  }
+}
+
+// Process kismet database files with backlog support
 async function processKismetDatabase() {
   const homeDir = '/home/toor';
   
@@ -302,85 +306,83 @@ async function processKismetDatabase() {
     const kismetFiles = files.filter(file => 
       file.startsWith('Kismet-') && 
       file.endsWith('.kismet')
-    );
+    ).sort(); // Sort chronologically (oldest first)
     
     if (kismetFiles.length === 0) {
       console.log('No kismet database files found');
       return false;
     }
     
-    const latestFile = kismetFiles.sort().pop();
-    const dbPath = path.join(homeDir, latestFile);
+    console.log(`Found ${kismetFiles.length} database file(s)`);
     
-    // Identify files that can be deleted (keep latest 2 files)
-    const filesToDelete = identifyFilesToDelete(kismetFiles, latestFile);
+    // Load the last upload time
+    let lastUploadTime = loadLastUploadState();
+    let processedCount = 0;
+    let totalRecords = 0;
+    let filesProcessed = [];
     
-    if (!fs.existsSync(dbPath)) {
-      console.log('Database file not found:', dbPath);
-      return false;
-    }
-    
-    const db = new Database(dbPath, { readonly: true });
-    
-    try {
-      // Load the last upload time
-      const lastUploadTime = loadLastUploadState();
+    // Process files sequentially from oldest to newest
+    for (let i = 0; i < kismetFiles.length; i++) {
+      const filename = kismetFiles[i];
+      const dbPath = path.join(homeDir, filename);
+      const isLatestFile = (i === kismetFiles.length - 1);
       
-      // Modified query to filter by last_time
-      const deviceQuery = `
-        SELECT * FROM devices 
-        WHERE last_time > ? 
-        ORDER BY last_time ASC 
-        LIMIT 1000
-      `;
-      
-      const deviceRows = db.prepare(deviceQuery).all(lastUploadTime);
-      
-      
-      const allProbes = [];
-      let maxLastTime = lastUploadTime;
-      
-      for (const deviceRow of deviceRows) {
-        const probeRecord = extractProbeInfo(deviceRow);
-        if (probeRecord) {
-          allProbes.push(probeRecord);
-          // Track the maximum last_time for state saving
-          if (probeRecord.last && probeRecord.last > maxLastTime) {
-            maxLastTime = probeRecord.last;
-          }
-        }
+      if (!fs.existsSync(dbPath)) {
+        console.log(`Database file not found: ${filename}`);
+        continue;
       }
-
-	  console.log('');
-      console.log(`Extracted ${allProbes.length}/${deviceRows.length} records`);
-	  console.log('');
+      
+      console.log(`Processing file ${i + 1}/${kismetFiles.length}: ${filename}`);
+      
+      const { allProbes, maxLastTime } = await processSingleDatabaseFile(dbPath, lastUploadTime);
+      
+      console.log(`Extracted ${allProbes.length} records from ${filename}`);
       
       if (allProbes.length > 0) {
         const success = await uploadProbeData(allProbes);
         
         if (success) {
-          // Save the new last upload time only on successful upload
           saveLastUploadState(maxLastTime);
-          return true;
+          lastUploadTime = maxLastTime; // Update for next file
+          totalRecords += allProbes.length;
+          processedCount++;
+          
+          // Mark old files for deletion (not the latest file)
+          if (!isLatestFile) {
+            filesProcessed.push(filename);
+          }
+          
+          // Rate limiting: delay before processing next file (if not the last one)
+          if (i < kismetFiles.length - 1) {
+            console.log(`Rate limiting: waiting ${BACKLOG_PROCESSING_DELAY}ms before next file...`);
+            await sleep(BACKLOG_PROCESSING_DELAY);
+          }
         } else {
-          console.log('Upload failed - do not flush database');
-          return false;
+          console.log(`Upload failed for ${filename} - stopping backlog processing`);
+          break; // Stop processing if upload fails
         }
       } else {
-        // Even if no valid probes extracted, update the timestamp to avoid reprocessing
-        saveLastUploadState(maxLastTime);
-        return true;
-      }
-      
-    } finally {
-      db.close();
-      
-      // Delete old files after successful processing and database closure
-      if (filesToDelete.length > 0) {
-        console.log(`Found ${filesToDelete.length} old files to delete:`, filesToDelete);
-        deleteOldFiles(filesToDelete);
+        // No new records in this file, mark it for deletion if not latest
+        if (!isLatestFile) {
+          filesProcessed.push(filename);
+        }
       }
     }
+    
+    // Summary
+    console.log('');
+    console.log(`=== Processing Summary ===`);
+    console.log(`Files processed: ${processedCount}/${kismetFiles.length}`);
+    console.log(`Total records uploaded: ${totalRecords}`);
+    console.log('');
+    
+    // Delete old files that were successfully processed
+    if (filesProcessed.length > 0) {
+      console.log(`Deleting ${filesProcessed.length} processed file(s)`);
+      deleteOldFiles(filesProcessed);
+    }
+    
+    return processedCount > 0;
     
   } catch (error) {
     console.error('Error processing kismet database:', error);
@@ -425,7 +427,7 @@ async function uploadProbeData(probeData) {
 
 processKismetDatabase().then((processSuccess) => {
   if (processSuccess) {
-	process.exit(0);
+    process.exit(0);
   }
 }).catch((error) => {
   console.error('Kismet probe extractor failed:', error);
