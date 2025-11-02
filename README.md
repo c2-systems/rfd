@@ -41,7 +41,11 @@ make
 
 ## ~~~ MOVE SD CARD TO ACTUAL RPI NOW - HEAVY LIFTING IS OVER ~~~
 
-Now you can install:
+Run install:
+
+```
+cd kismet
+```
 
 ```
 sudo make suidinstall
