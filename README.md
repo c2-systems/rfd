@@ -80,3 +80,10 @@ cd /home/toor
 ```
 sudo wget https://raw.githubusercontent.com/c2-systems/rfd/refs/heads/main/reloadservicesandconf.sh
 ```
+```
+sudo chmod +x /home/toor/reloadservicesandconf.sh
+```
+
+```
+./reloadservicesandconf.sh
+```
