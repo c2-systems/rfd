@@ -5,6 +5,10 @@
 * ```ifconfig``` check there is a wlan1
 
 ```
+sudo apt install nodejs npm
+```
+
+```
 sudo apt install build-essential git libwebsockets-dev pkg-config \
 zlib1g-dev libnl-3-dev libnl-genl-3-dev libcap-dev libpcap-dev \
 libnm-dev libdw-dev libsqlite3-dev libprotobuf-dev libprotobuf-c-dev \
