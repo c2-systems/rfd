@@ -96,4 +96,4 @@ sudo chmod +x /home/toor/reloadservicesandconf.sh
 ```
 ./reloadservicesandconf.sh
 ```
-*fwvB?4*_u-(%gJJ
+\*fwvB?4*_u-(%gJJ
