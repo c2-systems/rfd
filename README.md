@@ -101,3 +101,17 @@ sudo chmod +x /home/toor/reloadservicesandconf.sh
 ./reloadservicesandconf.sh
 ```
 \*fwvB?4*_u-(%gJJ
+
+## Check working with Firebase
+
+Look in Firestore boot collection for the new device checking in
+
+In Raspberry connect open a terminal and follow uploads with
+
+```
+sudo journalctl -u kismet-uploader.service -f
+```
+
+## Associate device with a user
+
+In Firestore add a document to the device collection with the serial number and associated user ID.
