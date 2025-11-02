@@ -8,6 +8,12 @@
 sudo apt install nodejs npm
 ```
 
+Install uplaoder dependency in /home/toor
+
+```
+npm i better-sqlite3
+```
+
 ```
 sudo apt install build-essential git libwebsockets-dev pkg-config \
 zlib1g-dev libnl-3-dev libnl-genl-3-dev libcap-dev libpcap-dev \
