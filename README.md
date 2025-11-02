@@ -33,6 +33,22 @@ First make version:
 make version
 ```
 
+Create a swap file to not run out of RAM during make.
+
+```
+# Create a 4GB swap file
+sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# Verify it's active
+free -h
+
+# Now try building with one CPU core
+make -j1
+```
+
 Then, compile Kismet and the Kismet tools: (this step can take almost an hour ...)
 
 ```
