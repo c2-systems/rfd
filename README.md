@@ -24,7 +24,7 @@ python3-numpy python3-serial python3-usb python3-dev python3-websockets \
 libubertooth-dev libbtbb-dev libmosquitto-dev librtlsdr-dev rtl-433
 ```
 
-Clone kismet into a folder:
+Clone kismet into a /home/toor/kismet:
 
 ```
 git clone https://www.kismetwireless.net/git/kismet.git
