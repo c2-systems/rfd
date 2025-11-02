@@ -1,6 +1,7 @@
 ## Setup
 
-* ```sudo apt update```
+* Create a 32GB SD card with the Raspberry SD Card imager
+*  ```sudo apt update```
 * Insert dongle
 * ```ifconfig``` check there is a wlan1
 
