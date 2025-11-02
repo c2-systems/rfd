@@ -39,6 +39,7 @@ Then, compile Kismet and the Kismet tools: (this step can take almost an hour ..
 make
 ```
 
+## ~~~ MOVE SD CARD TO ACTUAL RPI NOW - HEAVY LIFTING IS OVER ~~~
 
 Now you can install:
 
