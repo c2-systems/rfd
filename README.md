@@ -8,7 +8,7 @@
 sudo apt install nodejs npm
 ```
 
-Install uplaoder dependency in /home/toor
+Install uploader dependency in /home/toor
 
 ```
 npm i better-sqlite3
