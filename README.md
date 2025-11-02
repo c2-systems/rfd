@@ -44,16 +44,17 @@ sudo swapon /swapfile
 
 # Verify it's active
 free -h
+```
 
+```
 # Now try building with one CPU core
 make -j1
 ```
 
 Then, compile Kismet and the Kismet tools: (this step can take almost an hour ...)
 
-```
-make
-```
+
+
 
 ## ~~~ MOVE SD CARD TO ACTUAL RPI NOW - HEAVY LIFTING IS OVER ~~~
 
