@@ -82,7 +82,7 @@ sudo make suidinstall
 Set up a group connected to your username:
 
 ```
-sudo usermod -aG kismet your-user-here
+sudo usermod -aG kismet [user]
 ```
 
 See groups by running
