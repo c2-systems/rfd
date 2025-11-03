@@ -59,6 +59,15 @@ free -h
 ```
 
 ```
+# If swapfile is not active in free-h
+sudo swapon /swapfile
+
+# I you see some RAM compression - disable it
+sudo swapoff /dev/zram0
+
+```
+
+```
 # Now try building with one CPU core
 make -j1
 ```
