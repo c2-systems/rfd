@@ -24,7 +24,7 @@ while true; do \
   iwconfig wlan1; \
   kismet --capture-source wlan1 --no-ncurses & \
   KISMET_PID=$!; \
-  sleep 300; \
+  sleep 3600; \
   node kismet-uploader.js; \
   kill $KISMET_PID 2>/dev/null || pkill -f "kismet.*wlan1"; \
   wait $KISMET_PID 2>/dev/null; \
