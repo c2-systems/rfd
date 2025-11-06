@@ -300,14 +300,32 @@ async function processUploadFiles() {
   const homeDir = '/home/toor';
   
   try {
-    const files = fs.readdirSync(homeDir);
-    const uploadFiles = files.filter(file => 
-      file.startsWith('Kismet-') && 
-      file.endsWith('.upload')
-    ).sort(); // Sort chronologically (oldest first)
+    // Wait up to 5 seconds for .upload files to appear
+    let uploadFiles = [];
+    let waitAttempts = 0;
+    const maxWaitAttempts = 5;
+    
+    while (waitAttempts < maxWaitAttempts) {
+      const files = fs.readdirSync(homeDir);
+      uploadFiles = files.filter(file => 
+        file.startsWith('Kismet-') && 
+        file.endsWith('.upload')
+      ).sort(); // Sort chronologically (oldest first)
+      
+      if (uploadFiles.length > 0) {
+        console.log(`Found ${uploadFiles.length} .upload file(s) after ${waitAttempts} seconds`);
+        break;
+      }
+      
+      waitAttempts++;
+      if (waitAttempts < maxWaitAttempts) {
+        console.log(`Waiting for .upload files... (attempt ${waitAttempts}/${maxWaitAttempts})`);
+        await sleep(1000); // Wait 1 second
+      }
+    }
     
     if (uploadFiles.length === 0) {
-      console.log('No .upload files found');
+      console.log('No .upload files found after waiting 5 seconds');
       return false;
     }
     
