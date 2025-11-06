@@ -3,7 +3,6 @@
 Description=Kismet database uploader service
 After=kismet-boot.service
 Wants=kismet-boot.service
-
 [Service]
 Type=simple
 User=toor
@@ -25,6 +24,19 @@ while true; do \
   kismet --capture-source wlan1 --no-ncurses & \
   KISMET_PID=$!; \
   sleep 3600; \
+  JOURNAL_FILE=$(find /home/toor -name "*.kismet-journal" -type f | head -n 1); \
+  if [ -n "$JOURNAL_FILE" ]; then \
+    KISMET_FILE="${JOURNAL_FILE%.kismet-journal}.kismet"; \
+    if [ -f "$KISMET_FILE" ]; then \
+      UPLOAD_FILE="${KISMET_FILE%.kismet}.upload"; \
+      echo "Copying $KISMET_FILE to $UPLOAD_FILE"; \
+      cp "$KISMET_FILE" "$UPLOAD_FILE"; \
+    else \
+      echo "Warning: Journal file found but kismet file does not exist: $KISMET_FILE"; \
+    fi; \
+  else \
+    echo "Warning: No .kismet-journal file found"; \
+  fi; \
   node kismet-uploader.js; \
   kill $KISMET_PID 2>/dev/null || pkill -f "kismet.*wlan1"; \
   wait $KISMET_PID 2>/dev/null; \
@@ -34,6 +46,5 @@ Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
-
 [Install]
 WantedBy=multi-user.target
