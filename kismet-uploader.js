@@ -5,8 +5,8 @@ const Database = require('better-sqlite3');
 // State file to track last successful upload
 const STATE_FILE = '/home/toor/last_upload_state.json';
 
-// Rate limiting: delay between processing old files (in milliseconds)
-const BACKLOG_PROCESSING_DELAY = 2000; // 2 seconds between each old file
+// Rate limiting: delay between processing files (in milliseconds)
+const UPLOAD_PROCESSING_DELAY = 2000; // 2 seconds between each file
 const BACKLOG_BATCH_SIZE = 1000; // Records per batch
 
 // Get RPi Serial
@@ -55,30 +55,22 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Delete old database files
-function deleteOldFiles(filenames) {
+// Delete a single file
+function deleteFile(filename) {
   const homeDir = '/home/toor';
-  let deletedCount = 0;
-  
-  for (const filename of filenames) {
-    try {
-      const filePath = path.join(homeDir, filename);
-      
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        console.log(`Deleted: ${filename}`);
-        deletedCount++;
-      }
-    } catch (error) {
-      console.error(`Error deleting file ${filename}:`, error);
+  try {
+    const filePath = path.join(homeDir, filename);
+    
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log(`Deleted: ${filename}`);
+      return true;
     }
+  } catch (error) {
+    console.error(`Error deleting file ${filename}:`, error);
+    return false;
   }
-  
-  if (deletedCount > 0) {
-    console.log('');
-    console.log(`Successfully deleted ${deletedCount} old database files`);
-    console.log('');
-  }
+  return false;
 }
 
 // Process Buffer data to extract JSON content
@@ -297,42 +289,40 @@ async function processSingleDatabaseFile(dbPath, lastUploadTime) {
   }
 }
 
-// Process kismet database files with backlog support
-async function processKismetDatabase() {
+// Process upload database files
+async function processUploadFiles() {
   const homeDir = '/home/toor';
   
   try {
     const files = fs.readdirSync(homeDir);
-    const kismetFiles = files.filter(file => 
+    const uploadFiles = files.filter(file => 
       file.startsWith('Kismet-') && 
-      file.endsWith('.kismet')
+      file.endsWith('.upload')
     ).sort(); // Sort chronologically (oldest first)
     
-    if (kismetFiles.length === 0) {
-      console.log('No kismet database files found');
+    if (uploadFiles.length === 0) {
+      console.log('No .upload files found');
       return false;
     }
     
-    console.log(`Found ${kismetFiles.length} database file(s)`);
+    console.log(`Found ${uploadFiles.length} .upload file(s) to process`);
     
     // Load the last upload time
     let lastUploadTime = loadLastUploadState();
     let processedCount = 0;
     let totalRecords = 0;
-    let filesProcessed = [];
     
     // Process files sequentially from oldest to newest
-    for (let i = 0; i < kismetFiles.length; i++) {
-      const filename = kismetFiles[i];
+    for (let i = 0; i < uploadFiles.length; i++) {
+      const filename = uploadFiles[i];
       const dbPath = path.join(homeDir, filename);
-      const isLatestFile = (i === kismetFiles.length - 1);
       
       if (!fs.existsSync(dbPath)) {
-        console.log(`Database file not found: ${filename}`);
+        console.log(`Upload file not found: ${filename}`);
         continue;
       }
       
-      console.log(`Processing file ${i + 1}/${kismetFiles.length}: ${filename}`);
+      console.log(`Processing file ${i + 1}/${uploadFiles.length}: ${filename}`);
       
       const { allProbes, maxLastTime } = await processSingleDatabaseFile(dbPath, lastUploadTime);
       
@@ -347,45 +337,37 @@ async function processKismetDatabase() {
           totalRecords += allProbes.length;
           processedCount++;
           
-          // Mark old files for deletion (not the latest file)
-          if (!isLatestFile) {
-            filesProcessed.push(filename);
-          }
+          // Delete the file after successful upload
+          console.log(`Upload successful, deleting ${filename}`);
+          deleteFile(filename);
           
           // Rate limiting: delay before processing next file (if not the last one)
-          if (i < kismetFiles.length - 1) {
-            console.log(`Rate limiting: waiting ${BACKLOG_PROCESSING_DELAY}ms before next file...`);
-            await sleep(BACKLOG_PROCESSING_DELAY);
+          if (i < uploadFiles.length - 1) {
+            console.log(`Rate limiting: waiting ${UPLOAD_PROCESSING_DELAY}ms before next file...`);
+            await sleep(UPLOAD_PROCESSING_DELAY);
           }
         } else {
-          console.log(`Upload failed for ${filename} - stopping backlog processing`);
+          console.log(`Upload failed for ${filename} - stopping processing`);
           break; // Stop processing if upload fails
         }
       } else {
-        // No new records in this file, mark it for deletion if not latest
-        if (!isLatestFile) {
-          filesProcessed.push(filename);
-        }
+        // No new records in this file, delete it anyway
+        console.log(`No new records in ${filename}, deleting...`);
+        deleteFile(filename);
       }
     }
     
     // Summary
     console.log('');
     console.log(`=== Processing Summary ===`);
-    console.log(`Files processed: ${processedCount}/${kismetFiles.length}`);
+    console.log(`Files processed: ${processedCount}/${uploadFiles.length}`);
     console.log(`Total records uploaded: ${totalRecords}`);
     console.log('');
-    
-    // Delete old files that were successfully processed
-    if (filesProcessed.length > 0) {
-      console.log(`Deleting ${filesProcessed.length} processed file(s)`);
-      deleteOldFiles(filesProcessed);
-    }
     
     return processedCount > 0;
     
   } catch (error) {
-    console.error('Error processing kismet database:', error);
+    console.error('Error processing upload files:', error);
     return false;
   }
 }
@@ -425,7 +407,7 @@ async function uploadProbeData(probeData) {
   }
 }
 
-processKismetDatabase().then((processSuccess) => {
+processUploadFiles().then((processSuccess) => {
   if (processSuccess) {
     process.exit(0);
   }
