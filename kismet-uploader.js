@@ -55,12 +55,6 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Check if a database file is currently active (has a journal file)
-function isActiveDatabase(filename, homeDir) {
-  const journalPath = path.join(homeDir, `${filename}-journal`);
-  return fs.existsSync(journalPath);
-}
-
 // Delete old database files
 function deleteOldFiles(filenames) {
   const homeDir = '/home/toor';
@@ -138,6 +132,7 @@ function processBuffer(obj) {
 // Extract probe information from device data
 function extractProbeInfo(deviceData) {
   try {
+    const ignoreList = ['Ziggo4953734', 'famgommans'];
     
     // Process the device buffer to get JSON data
     const processedDevice = processBuffer(deviceData.device);
@@ -308,19 +303,10 @@ async function processKismetDatabase() {
   
   try {
     const files = fs.readdirSync(homeDir);
-    const allKismetFiles = files.filter(file => 
+    const kismetFiles = files.filter(file => 
       file.startsWith('Kismet-') && 
       file.endsWith('.kismet')
     ).sort(); // Sort chronologically (oldest first)
-    
-    // Filter out active database files (those with journal files)
-    const kismetFiles = allKismetFiles.filter(file => {
-      const isActive = isActiveDatabase(file, homeDir);
-      if (isActive) {
-        console.log(`Skipping active database: ${file} (has journal file)`);
-      }
-      return !isActive;
-    });
     
     if (kismetFiles.length === 0) {
       console.log('No kismet database files found');
