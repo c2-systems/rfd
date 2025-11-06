@@ -68,7 +68,9 @@ function deleteFile(filename) {
       // recursive call to remove original kismet file
       if(filename.includes('.upload')) {
         const kismetFile = filename.replace('.upload', '.kismet');
-        deleteFile(kismetFile);
+        setTimeout(()=>{
+          deleteFile(kismetFile);
+        }, 10000);
       } else {
         return true;  
       }
