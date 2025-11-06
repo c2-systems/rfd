@@ -64,7 +64,14 @@ function deleteFile(filename) {
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
       console.log(`Deleted: ${filename}`);
-      return true;
+      
+      // recursive call to remove original kismet file
+      if(filename.includes('.upload')) {
+        const kismetFile = filename.replace('.upload', '.kismet');
+        deleteFile(kismetFile);
+      } else {
+        return true;  
+      }
     }
   } catch (error) {
     console.error(`Error deleting file ${filename}:`, error);
