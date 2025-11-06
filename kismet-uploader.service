@@ -10,9 +10,9 @@ WorkingDirectory=/home/toor
 ExecStart=/bin/bash -c '\
 while true; do \
   echo "Checking wlan1 monitor mode..."; \
-  CURRENT_MODE=$(iw dev wlan1 info | grep type | awk "{print \$2}"); \
-  if [ "$CURRENT_MODE" != "monitor" ]; then \
-    echo "wlan1 not in monitor mode (currently: $CURRENT_MODE), fixing..."; \
+  CURRENT_MODE=$(iw dev wlan1 info | grep type | awk "{print $$2}"); \
+  if [ "$$CURRENT_MODE" != "monitor" ]; then \
+    echo "wlan1 not in monitor mode (currently: $$CURRENT_MODE), fixing..."; \
     sudo ip link set wlan1 down && \
     sudo iw dev wlan1 set type monitor && \
     sudo ip link set wlan1 up && \
@@ -22,24 +22,21 @@ while true; do \
   fi; \
   iwconfig wlan1; \
   kismet --capture-source wlan1 --no-ncurses & \
-  KISMET_PID=$!; \
+  KISMET_PID=$$!; \
   sleep 3600; \
-  JOURNAL_FILE=$(find /home/toor -name "*.kismet-journal" -type f | head -n 1); \
-  if [ -n "$JOURNAL_FILE" ]; then \
-    KISMET_FILE="${JOURNAL_FILE%.kismet-journal}.kismet"; \
-    if [ -f "$KISMET_FILE" ]; then \
-      UPLOAD_FILE="${KISMET_FILE%.kismet}.upload"; \
-      echo "Copying $KISMET_FILE to $UPLOAD_FILE"; \
-      cp "$KISMET_FILE" "$UPLOAD_FILE"; \
-    else \
-      echo "Warning: Journal file found but kismet file does not exist: $KISMET_FILE"; \
-    fi; \
+  echo "Finding active kismet file..."; \
+  JOURNAL_FILE=$$(find . -maxdepth 1 -name "*.kismet-journal" -type f | head -n 1); \
+  if [ -n "$$JOURNAL_FILE" ]; then \
+    KISMET_FILE="$${JOURNAL_FILE%.kismet-journal}.kismet"; \
+    UPLOAD_FILE="$${KISMET_FILE%.kismet}.upload"; \
+    echo "Copying $$KISMET_FILE to $$UPLOAD_FILE"; \
+    cp "$$KISMET_FILE" "$$UPLOAD_FILE"; \
   else \
-    echo "Warning: No .kismet-journal file found"; \
+    echo "No active kismet-journal file found"; \
   fi; \
   node kismet-uploader.js; \
-  kill $KISMET_PID 2>/dev/null || pkill -f "kismet.*wlan1"; \
-  wait $KISMET_PID 2>/dev/null; \
+  kill $$KISMET_PID 2>/dev/null || pkill -f "kismet.*wlan1"; \
+  wait $$KISMET_PID 2>/dev/null; \
   sleep 5; \
 done'
 Restart=always
