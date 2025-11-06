@@ -124,7 +124,6 @@ function processBuffer(obj) {
 // Extract probe information from device data
 function extractProbeInfo(deviceData) {
   try {
-    const ignoreList = ['Ziggo4953734', 'famgommans'];
     
     // Process the device buffer to get JSON data
     const processedDevice = processBuffer(deviceData.device);
