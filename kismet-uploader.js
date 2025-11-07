@@ -64,22 +64,60 @@ function deleteFile(filename) {
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
       console.log(`Deleted: ${filename}`);
-      
-      // recursive call to remove original kismet file
-      if(filename.includes('.upload')) {
-        const kismetFile = filename.replace('.upload', '.kismet');
-        setTimeout(()=>{
-          deleteFile(kismetFile);
-        }, 10000);
-      } else {
-        return true;  
-      }
+      return true;
+    } else {
+      console.log(`File does not exist: ${filename}`);
+      return false;
     }
   } catch (error) {
     console.error(`Error deleting file ${filename}:`, error);
     return false;
   }
-  return false;
+}
+
+// Delete orphaned .kismet files that don't have associated .kismet-journal files
+function deleteOrphanedKismetFiles() {
+  const homeDir = '/home/toor';
+  try {
+    const files = fs.readdirSync(homeDir);
+    
+    // Find all .kismet files
+    const kismetFiles = files.filter(file => 
+      file.startsWith('Kismet-') && 
+      file.endsWith('.kismet') &&
+      !file.endsWith('.upload')
+    );
+    
+    // Find all .kismet-journal files
+    const journalFiles = new Set(
+      files
+        .filter(file => file.endsWith('.kismet-journal'))
+        .map(file => file.replace('.kismet-journal', '.kismet'))
+    );
+    
+    let deletedCount = 0;
+    
+    // Delete .kismet files that don't have a corresponding journal file
+    for (const kismetFile of kismetFiles) {
+      if (!journalFiles.has(kismetFile)) {
+        console.log(`Found orphaned kismet file: ${kismetFile}`);
+        if (deleteFile(kismetFile)) {
+          deletedCount++;
+        }
+      }
+    }
+    
+    if (deletedCount > 0) {
+      console.log(`Deleted ${deletedCount} orphaned .kismet file(s)`);
+    } else {
+      console.log('No orphaned .kismet files found');
+    }
+    
+    return deletedCount;
+  } catch (error) {
+    console.error('Error cleaning up orphaned kismet files:', error);
+    return 0;
+  }
 }
 
 // Process Buffer data to extract JSON content
@@ -367,6 +405,9 @@ async function processUploadFiles() {
           console.log(`Upload successful, deleting ${filename}`);
           deleteFile(filename);
           
+          // Clean up orphaned .kismet files
+          deleteOrphanedKismetFiles();
+          
           // Rate limiting: delay before processing next file (if not the last one)
           if (i < uploadFiles.length - 1) {
             console.log(`Rate limiting: waiting ${UPLOAD_PROCESSING_DELAY}ms before next file...`);
@@ -380,6 +421,9 @@ async function processUploadFiles() {
         // No new records in this file, delete it anyway
         console.log(`No new records in ${filename}, deleting...`);
         deleteFile(filename);
+        
+        // Clean up orphaned .kismet files
+        deleteOrphanedKismetFiles();
       }
     }
     
